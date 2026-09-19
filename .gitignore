@@ -1,6 +1,7 @@
 node_modules/
+harness/node_modules/
 work/
-dist/
 .runtime/
 *.log
 *.tgz
+.env

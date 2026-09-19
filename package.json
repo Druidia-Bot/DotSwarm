@@ -1,0 +1,20 @@
+{
+  "name": "deepastra-swarm",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Codex plugin: Astra plans and supervises, a DeepSeek Harness Agent Team of Flash workers does the work",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "setup": "node src/cli.mjs setup",
+    "doctor": "node src/cli.mjs doctor",
+    "serve": "node src/server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "smoke:live": "node src/cli.mjs smoke --live"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.26.0"
+  }
+}

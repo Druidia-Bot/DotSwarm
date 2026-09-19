@@ -1,0 +1,68 @@
+#!/usr/bin/env node
+// MCP stdio server mounted inside the DeepSeek Harness runtime so every team
+// member can record and read shared findings. The ledger file comes from
+// SWARM_FINDINGS_FILE. Tools appear to the models as mcp__findings__record_finding
+// and mcp__findings__list_findings.
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { Findings, FINDING_TYPES } from './findings.mjs';
+
+const file = process.env.SWARM_FINDINGS_FILE;
+if (!file) {
+  console.error('SWARM_FINDINGS_FILE is required');
+  process.exit(2);
+}
+const findings = new Findings(file);
+
+const TOOLS = [
+  {
+    name: 'record_finding',
+    description: 'Append one finding to the shared team ledger so every teammate and the Lead can see it. Use for discoveries that affect other tasks, warnings, failures, decisions, and open questions. Not for routine status.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['author', 'type', 'scope', 'message'],
+      properties: {
+        author: { type: 'string', description: 'Your team member name (lead or the teammate name you were given).' },
+        type: { type: 'string', enum: FINDING_TYPES },
+        scope: { type: 'string', description: 'Area the finding concerns: a path prefix, module, or topic such as auth, tests, db/migrations.' },
+        message: { type: 'string', description: 'Self-contained finding, concrete and short. Include file paths and evidence.' },
+      },
+    },
+  },
+  {
+    name: 'list_findings',
+    description: 'Read the shared team findings ledger, newest last. Filter by scope prefix or type.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        scope: { type: 'string' },
+        type: { type: 'string', enum: FINDING_TYPES },
+        limit: { type: 'integer', minimum: 1, maximum: 500 },
+      },
+    },
+  },
+];
+
+const server = new Server({ name: 'findings', version: '2.0.0' }, { capabilities: { tools: {} } });
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args = {} } = request.params;
+  try {
+    if (name === 'record_finding') {
+      const row = findings.append(args);
+      return { content: [{ type: 'text', text: JSON.stringify({ recorded: row.id }) }] };
+    }
+    if (name === 'list_findings') {
+      const rows = findings.list(args);
+      return { content: [{ type: 'text', text: rows.length ? Findings.render(rows) : 'No findings recorded yet.' }] };
+    }
+    return { isError: true, content: [{ type: 'text', text: `Unknown tool ${name}` }] };
+  } catch (error) {
+    return { isError: true, content: [{ type: 'text', text: error.message }] };
+  }
+});
+
+await server.connect(new StdioServerTransport());
