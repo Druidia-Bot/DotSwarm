@@ -1,6 +1,19 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildLeadPrompt, buildSteerPrompt, parseReport, suggestedRoles } from '../src/prompt.mjs';
+import { buildLeadPrompt, buildResumeSection, buildSteerPrompt, parseReport, suggestedRoles } from '../src/prompt.mjs';
+
+test('resume section lists the old board, ledger size, and instruction', () => {
+  const text = buildResumeSection({
+    fromSwarmId: 'sw-old', tasks: [{ id: 'task-2', subject: 'Tests', status: 'in_progress', owner: 'tester' }],
+    lastLeadMessage: 'half done', findingsCount: 12, instruction: 'finish tests',
+  });
+  assert.match(text, /RESUMING PREVIOUS SWARM sw-old/);
+  assert.match(text, /12 entries/);
+  assert.match(text, /- task-2 \[in_progress, was tester\] Tests/);
+  assert.match(text, /half done/);
+  assert.match(text, /finish tests/);
+  assert.match(buildResumeSection({ fromSwarmId: 'x', tasks: [], findingsCount: 0 }), /had not created tasks/);
+});
 
 test('lead prompt explicitly requests Agent Teams and carries the protocol and report format', () => {
   const text = buildLeadPrompt({

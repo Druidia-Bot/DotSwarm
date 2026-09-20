@@ -25,7 +25,7 @@ const TOOLS = [
         workspace: { type: 'string', description: 'Absolute path of the checkout the team works in.' },
         max_agents: { type: 'integer', minimum: 1, maximum: DEFAULTS.maxAgentsCap, description: `Teammate cap (default ${DEFAULTS.maxAgents}). Small tasks need 1 or 2.` },
         roles: { type: 'array', items: { type: 'string' }, description: 'Optional role hints such as "explorer: ..." or "tester: ...".' },
-        isolate: { type: 'boolean', description: 'Run in a fresh git worktree on branch swarm/<id> so the main checkout stays untouched. Requires a git repository.' },
+        isolate: { type: 'boolean', description: 'Run in a fresh git worktree on branch swarm/<id> so the main checkout stays untouched. Default: true whenever the workspace is a git repository. Pass false to work directly in the checkout.' },
         permission_mode: { type: 'string', enum: DEFAULTS.permissionModes, description: `Runtime sandbox for the team (default ${DEFAULTS.permissionMode}). workspace-write confines writes to the workspace but on Windows it also blocks spawning native toolchain binaries such as esbuild and workerd, so npm install, vitest, Astro, and wrangler fail. Use danger-full-access for real build work and rely on the objective's boundaries; use read-only for exploration-only swarms.` },
         model: { type: 'string', description: `Model for every team member (default ${DEFAULTS.model}).` },
         reasoning_effort: { type: 'string', enum: ['off', 'low', 'high', 'max'], description: 'DeepSeek reasoning effort for the team.' },
@@ -111,8 +111,22 @@ const TOOLS = [
     },
   },
   {
+    name: 'swarm_resume',
+    description: 'Continue a swarm whose server process is gone (phase detached) or that already finished. Starts a fresh team on the same workspace or worktree, seeded with the previous task board, the complete findings ledger, and the previous Lead\'s last report. The old teammates cannot be reattached. Returns the new swarm_id.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['swarm_id'],
+      properties: {
+        swarm_id: { type: 'string', description: 'The detached or finished swarm to continue.' },
+        instruction: { type: 'string', description: 'What to focus on now: remaining work, what to re-verify, what changed.' },
+        max_agents: { type: 'integer', minimum: 1, maximum: DEFAULTS.maxAgentsCap },
+      },
+    },
+  },
+  {
     name: 'swarm_list',
-    description: 'List swarms started by this server process.',
+    description: 'List swarms known to this server, including detached ones left by earlier server processes (resumable with swarm_resume).',
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
   },
 ];
@@ -152,6 +166,11 @@ async function call(name, args) {
     }
     case 'swarm_stop':
       return manager.get(args.swarm_id).stop();
+    case 'swarm_resume': {
+      if (!dshInstalled()) throw new Error('DeepSeek Harness is not installed. From the DeepAstra directory run: npm run setup');
+      const swarm = await manager.resume(args.swarm_id, { instruction: args.instruction, maxAgents: args.max_agents });
+      return { swarmId: swarm.id, resumedFrom: args.swarm_id, phase: swarm.phase, workspace: swarm.workspace, branch: swarm.branch };
+    }
     case 'swarm_list':
       return manager.list();
     default:

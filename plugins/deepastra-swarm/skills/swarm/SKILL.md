@@ -20,7 +20,11 @@ Swarm when the task needs several files touched, tests run, and iteration, and w
 3. Write acceptance criteria that are checkable, including exact commands.
 4. Write a short context packet: decisions already made, constraints, files not to touch. Never paste the conversation, credentials, or unrelated private context.
 
-Call `swarm_start` with `objective`, `plan`, `acceptance_criteria`, `context`, the absolute `workspace`, and `max_agents`. Ask for a reviewer or verifier role in `roles`; an adversarial reviewer finds defects before completion. Use `isolate: true` when the main checkout must stay clean. The default `permission_mode` is `danger-full-access` because the workspace sandbox breaks native toolchains on Windows; use `read-only` for exploration swarms.
+Call `swarm_start` with `objective`, `plan`, `acceptance_criteria`, `context`, the absolute `workspace`, and `max_agents`. Ask for a reviewer or verifier role in `roles`; an adversarial reviewer finds defects before completion. In a git repository the team works in its own worktree on branch `swarm/<id>` by default; you review and merge that branch afterwards. Pass `isolate: false` only when the user wants edits directly in the checkout. The default `permission_mode` is `danger-full-access` because the workspace sandbox breaks native toolchains on Windows; use `read-only` for exploration swarms.
+
+## If the swarm is detached
+
+After a Codex restart, `swarm_list` shows earlier swarms with phase `detached`. Their work on disk and their ledger survive; their teammates do not. Call `swarm_resume` with the swarm id and an `instruction` saying what remains and what to re-verify. The new team starts on the same worktree with the old task board, the whole ledger, and the old Lead's last report. Do not start a fresh `swarm_start` for the same objective; that discards the ledger.
 
 ## While it runs
 

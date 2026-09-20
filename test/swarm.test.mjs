@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -88,7 +89,73 @@ test('a runtime that dies during start reports failed with stderr', async () => 
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'deepastra-ws-'));
   const manager = new SwarmManager({ launch: fakeLaunch('exit-early') });
   await assert.rejects(manager.start({ objective: 'x', workspace }), /boot failure/);
-  assert.equal(manager.list()[0].phase, 'failed');
+  assert.equal(manager.list().at(-1).phase, 'failed');
+});
+
+function tempGitRepo() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deepastra-repo-'));
+  const run = (args) => execFileSync('git', args, { cwd: dir, windowsHide: true, stdio: 'pipe' });
+  run(['init', '-q']);
+  run(['config', 'user.email', 't@example.com']);
+  run(['config', 'user.name', 'test']);
+  fs.writeFileSync(path.join(dir, 'README.md'), '# repo\n');
+  run(['add', '.']);
+  run(['commit', '-q', '-m', 'init']);
+  return dir;
+}
+
+test('isolation defaults to a worktree for git repos, and swarms persist, detach, and resume', async (t) => {
+  const repo = tempGitRepo();
+  const manager = new SwarmManager({ launch: fakeLaunch('normal') });
+  t.after(() => manager.shutdownAll());
+  assert.equal(manager.normalizeSpec({ objective: 'x', workspace: repo }).isolate, true);
+  assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir() }).isolate, false);
+  assert.equal(manager.normalizeSpec({ objective: 'x', workspace: repo, isolate: false }).isolate, false);
+
+  const first = await manager.start({ objective: 'Build it', workspace: repo, max_agents: 1 });
+  assert.equal(first.branch, `swarm/${first.id}`);
+  assert.notEqual(first.workspace, repo);
+  assert.ok(fs.existsSync(path.join(first.workspace, 'README.md')), 'worktree checked out');
+  const deadline = Date.now() + 5000;
+  while (first.phase !== 'idle' && Date.now() < deadline) await first.waitForChange(500);
+  assert.equal((await first.result()).branch, first.branch);
+  await first.stop();
+  const saved = JSON.parse(fs.readFileSync(path.join(first.dir, 'state.json'), 'utf8'));
+  assert.equal(saved.phase, 'stopped');
+  assert.equal(saved.branch, first.branch);
+
+  // A later server process sees the clean stop as stopped...
+  const later = new SwarmManager({ launch: fakeLaunch('normal') });
+  t.after(() => later.shutdownAll());
+  assert.equal(later.get(first.id).phase, 'stopped');
+  // ...and a swarm whose owner died mid-run as detached, replayed from its log.
+  fs.writeFileSync(path.join(first.dir, 'state.json'), JSON.stringify({ ...saved, phase: 'running' }));
+  const crashed = new SwarmManager({ launch: fakeLaunch('normal') });
+  t.after(() => crashed.shutdownAll());
+  const detached = crashed.get(first.id);
+  assert.equal(detached.phase, 'detached');
+  assert.match(detached.status().detached, /swarm_resume/);
+  assert.deepEqual(detached.status().tasks.counts, { pending: 0, in_progress: 0, completed: 1 });
+  assert.equal(detached.inspect('member:worker').messages[0].text, 'worker done');
+  await assert.rejects(detached.steer('x'), /detached/);
+
+  const resumed = await crashed.resume(first.id, { instruction: 'verify task-1 then finish' });
+  assert.notEqual(resumed.id, first.id);
+  assert.equal(resumed.workspace, first.workspace, 'reuses the existing worktree');
+  assert.equal(resumed.branch, first.branch);
+  assert.equal(resumed.spec.isolate, false);
+  const prompt = fs.readFileSync(path.join(resumed.dir, 'lead-prompt.md'), 'utf8');
+  assert.match(prompt, new RegExp(`RESUMING PREVIOUS SWARM ${first.id}`));
+  assert.match(prompt, /task-1 \[completed, was worker\] Explore/);
+  assert.match(prompt, /verify task-1 then finish/);
+  assert.match(prompt, /PREVIOUS LEAD'S LAST MESSAGE/);
+  assert.equal(resumed.findings.readAll().length, first.findings.readAll().length, 'ledger carried over');
+  assert.equal(crashed.list().find((s) => s.swarmId === resumed.id).resumedFrom, first.id);
+  await assert.rejects(crashed.resume(resumed.id), /still running/);
+  const d2 = Date.now() + 5000;
+  while (resumed.phase !== 'idle' && Date.now() < d2) await resumed.waitForChange(500);
+  assert.equal(resumed.status().resumedFrom, first.id);
+  await resumed.stop();
 });
 
 test('spec validation', () => {

@@ -1,5 +1,5 @@
 // Swarm lifecycle: one dsh runtime per swarm, driven over the SDK protocol.
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,6 +28,37 @@ async function isGitRepo(cwd) {
   } catch {
     return false;
   }
+}
+
+function isGitRepoSync(cwd) {
+  try {
+    return execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim() === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function readJson(file, fallback = null) {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return fallback;
+  }
+}
+
+/** Replay a swarm's events.jsonl into a SwarmState, for detached swarms and resume packets. */
+function foldEventLog(dir, rootSessionId) {
+  const state = new SwarmState(rootSessionId);
+  let text = '';
+  try { text = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8'); } catch { return state; }
+  for (const line of text.split('\n')) {
+    if (!line) continue;
+    try {
+      const r = JSON.parse(line);
+      if (r.kind === 'notification') state.apply(r);
+    } catch { /* torn line */ }
+  }
+  return state;
 }
 
 /** Per-swarm patch layered over the profile: the findings ledger MCP server with literal paths. */
@@ -77,13 +108,67 @@ export class Swarm {
     this.#log?.write(JSON.stringify({ time: new Date().toISOString(), ...record }) + '\n');
   }
 
+  /** Durable summary so a later server process can list, inspect, and resume this swarm. */
+  persist() {
+    if (this.detached) return;
+    const state = {
+      id: this.id, phase: this.phase, workspace: this.workspace, branch: this.branch, rootSessionId: this.rootSessionId,
+      startedAt: this.startedAt, endedAt: this.endedAt, prompts: this.prompts, resumedFrom: this.spec.resume?.fromSwarmId ?? null,
+      error: this.error, savedAt: new Date().toISOString(),
+    };
+    try {
+      fs.writeFileSync(path.join(this.dir, 'state.json'), JSON.stringify(state, null, 2));
+    } catch { /* best effort */ }
+  }
+
+  /**
+   * Rebuild a swarm from disk after the server process that owned it is gone.
+   * It is read-only: status, inspect, and result work from the event log; steer and stop do not.
+   */
+  static fromDisk(id) {
+    const dir = path.join(swarmsDir(), id);
+    const spec = readJson(path.join(dir, 'spec.json'));
+    if (!spec) throw new Error(`no spec.json for swarm ${id}`);
+    const saved = readJson(path.join(dir, 'state.json'), {});
+    const swarm = new Swarm({ ...spec, swarmId: id });
+    swarm.detached = true;
+    swarm.workspace = saved.workspace ?? spec.workspace;
+    swarm.branch = saved.branch ?? spec.branch ?? null;
+    swarm.startedAt = saved.startedAt ?? null;
+    swarm.endedAt = saved.endedAt ?? saved.savedAt ?? null;
+    swarm.prompts = saved.prompts ?? [];
+    swarm.error = saved.error ?? null;
+    swarm.state = foldEventLog(dir, swarm.rootSessionId);
+    // A swarm whose owner died mid-run is detached; a clean end keeps its final phase.
+    swarm.phase = saved.phase === 'stopped' || saved.phase === 'failed' ? saved.phase : 'detached';
+    return swarm;
+  }
+
+  /** What a successor Lead needs to know from this swarm. */
+  resumePacket(instruction) {
+    const lead = this.state.lastLeadText();
+    return {
+      fromSwarmId: this.id,
+      tasks: this.state.taskBoard(),
+      lastLeadMessage: lead.slice(-3000),
+      findingsCount: this.findings.readAll().length,
+      ...(instruction ? { instruction } : {}),
+    };
+  }
+
   async start() {
+    if (this.detached) throw new Error(`swarm ${this.id} is detached; use swarm_resume`);
     fs.mkdirSync(this.dir, { recursive: true });
     this.#log = fs.createWriteStream(path.join(this.dir, 'events.jsonl'), { flags: 'a' });
     this.startedAt = new Date().toISOString();
     this.phase = 'starting';
     try {
+      if (this.spec.resume?.findingsFile && fs.existsSync(this.spec.resume.findingsFile)) {
+        // Continue the previous ledger; ids keep counting up.
+        fs.copyFileSync(this.spec.resume.findingsFile, this.findings.file);
+      }
       if (this.spec.isolate) await this.#createWorktree();
+      this.persist();
       const patchFile = path.join(this.dir, 'swarm.patch.yml');
       fs.writeFileSync(patchFile, swarmPatch({ findingsFile: this.findings.file, swarmId: this.id }));
       fs.writeFileSync(path.join(this.dir, 'spec.json'), JSON.stringify({ ...this.spec, workspace: this.workspace, branch: this.branch }, null, 2));
@@ -101,6 +186,7 @@ export class Swarm {
           this.error ??= `runtime exited (code ${exit.code}) ${this.client.stderrTail.slice(-1500)}`;
         }
         this.endedAt = new Date().toISOString();
+        this.persist();
         this.state.emit('change');
       });
       this.client.start();
@@ -115,12 +201,14 @@ export class Swarm {
       fs.writeFileSync(path.join(this.dir, 'lead-prompt.md'), prompt);
       await this.#prompt(prompt, 'objective');
       this.phase = 'running';
+      this.persist();
       this.state.on('change', () => this.#refreshPhase());
       return this;
     } catch (error) {
       this.phase = 'failed';
       this.error = `${error.message}${this.client?.stderrTail ? `\n--- dsh stderr ---\n${this.client.stderrTail.slice(-2000)}` : ''}`;
       this.endedAt = new Date().toISOString();
+      this.persist();
       await this.client?.close().catch(() => {});
       throw new Error(this.error);
     }
@@ -128,8 +216,10 @@ export class Swarm {
 
   #refreshPhase() {
     if (this.phase === 'stopped' || this.phase === 'failed') return;
+    const before = this.phase;
     if (this.state.rootStatus === 'idle') this.phase = 'idle';
     else if (this.state.rootStatus === 'running') this.phase = 'running';
+    if (this.phase !== before) this.persist();
   }
 
   async #prompt(text, kind) {
@@ -148,10 +238,11 @@ export class Swarm {
   }
 
   get alive() {
-    return this.client !== null && !this.client.exited && (this.phase === 'running' || this.phase === 'idle' || this.phase === 'starting');
+    return !this.detached && this.client !== null && !this.client.exited && (this.phase === 'running' || this.phase === 'idle' || this.phase === 'starting');
   }
 
   async steer(instruction) {
+    if (this.detached) throw new Error(`swarm ${this.id} is detached (its server process is gone); use swarm_resume to continue it`);
     if (!this.alive) throw new Error(`swarm ${this.id} is ${this.phase}; it cannot be steered`);
     const text = String(instruction ?? '').trim();
     if (!text) throw new Error('instruction is required');
@@ -215,9 +306,14 @@ export class Swarm {
   }
 
   async stop() {
+    if (this.detached) {
+      this.phase = 'stopped';
+      return { phase: this.phase, note: 'detached swarm marked stopped; its runtime was already gone' };
+    }
     if (this.phase === 'stopped' || this.phase === 'failed') return { phase: this.phase };
     this.phase = 'stopped';
     this.endedAt = new Date().toISOString();
+    this.persist();
     const exit = await this.client?.close();
     this.#log?.end();
     return { phase: this.phase, exit };
@@ -238,6 +334,8 @@ export class Swarm {
     return {
       swarmId: this.id,
       phase: this.phase,
+      ...(this.detached ? { detached: 'The server that ran this swarm is gone. Status is replayed from its log; use swarm_resume to continue the work.' } : {}),
+      ...(this.spec.resume ? { resumedFrom: this.spec.resume.fromSwarmId } : {}),
       ...(this.error ? { error: this.error.slice(0, 1500) } : {}),
       elapsedSeconds: this.elapsedSeconds(),
       workspace: this.workspace,
@@ -362,6 +460,19 @@ export class SwarmManager {
   constructor({ launch } = {}) {
     this.swarms = new Map();
     this.launch = launch;
+    this.loadDetached();
+  }
+
+  /** Register swarms left on disk by earlier server processes. */
+  loadDetached() {
+    let ids = [];
+    try { ids = fs.readdirSync(swarmsDir()).filter((d) => d.startsWith('sw-')); } catch { return; }
+    for (const id of ids) {
+      if (this.swarms.has(id)) continue;
+      try {
+        this.swarms.set(id, Swarm.fromDisk(id));
+      } catch { /* incomplete directory */ }
+    }
   }
 
   normalizeSpec(input) {
@@ -370,6 +481,8 @@ export class SwarmManager {
     const workspace = path.resolve(input.workspace || process.env.DEEPASTRA_WORKSPACE || process.cwd());
     if (!fs.existsSync(workspace) || !fs.statSync(workspace).isDirectory()) throw new Error(`workspace does not exist: ${workspace}`);
     const maxAgents = Math.max(1, Math.min(Number(input.max_agents ?? DEFAULTS.maxAgents) || DEFAULTS.maxAgents, DEFAULTS.maxAgentsCap));
+    // Isolation is the default wherever it is possible: a git repo gets its own worktree.
+    const isolate = input.isolate === undefined ? isGitRepoSync(workspace) : Boolean(input.isolate);
     return {
       swarmId: newId(),
       objective,
@@ -379,7 +492,7 @@ export class SwarmManager {
       roles: Array.isArray(input.roles) ? input.roles.map(String) : undefined,
       maxAgents,
       workspace,
-      isolate: Boolean(input.isolate),
+      isolate,
       permissionMode: DEFAULTS.permissionModes.includes(input.permission_mode) ? input.permission_mode : DEFAULTS.permissionMode,
       provider: input.provider ? String(input.provider) : DEFAULTS.provider,
       model: input.model ? String(input.model) : DEFAULTS.model,
@@ -396,6 +509,31 @@ export class SwarmManager {
     return swarm;
   }
 
+  /**
+   * Continue an interrupted or finished swarm in a fresh runtime. The old team and
+   * board cannot be reattached (the SDK server only creates sessions), so the new
+   * Lead starts from the old board, the full ledger, and the old Lead's last message,
+   * on the same workspace or worktree.
+   */
+  async resume(id, { instruction, maxAgents } = {}) {
+    const previous = this.get(id);
+    if (previous.alive) throw new Error(`swarm ${id} is still running; steer it instead of resuming`);
+    const spec = {
+      ...previous.spec,
+      swarmId: newId(),
+      // The previous worktree (or plain workspace) already holds the work; never create another.
+      workspace: previous.workspace,
+      isolate: false,
+      maxAgents: maxAgents ? Math.max(1, Math.min(Number(maxAgents), DEFAULTS.maxAgentsCap)) : previous.spec.maxAgents,
+      resume: { ...previous.resumePacket(instruction), findingsFile: previous.findings.file },
+    };
+    const swarm = new Swarm(spec, { launch: this.launch });
+    swarm.branch = previous.branch;
+    this.swarms.set(swarm.id, swarm);
+    await swarm.start();
+    return swarm;
+  }
+
   get(id) {
     const swarm = this.swarms.get(id);
     if (!swarm) throw new Error(`unknown swarm ${id}; known: ${[...this.swarms.keys()].join(', ') || 'none'}`);
@@ -403,10 +541,13 @@ export class SwarmManager {
   }
 
   list() {
-    return [...this.swarms.values()].map((s) => ({
-      swarmId: s.id, phase: s.phase, workspace: s.workspace, elapsedSeconds: s.elapsedSeconds(),
-      objective: s.spec.objective.slice(0, 120),
-    }));
+    return [...this.swarms.values()]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((s) => ({
+        swarmId: s.id, phase: s.phase, workspace: s.workspace, ...(s.branch ? { branch: s.branch } : {}),
+        elapsedSeconds: s.elapsedSeconds(), objective: s.spec.objective.slice(0, 120),
+        ...(s.spec.resume ? { resumedFrom: s.spec.resume.fromSwarmId } : {}),
+      }));
   }
 
   async shutdownAll() {

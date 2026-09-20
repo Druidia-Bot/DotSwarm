@@ -66,7 +66,10 @@ Restart Codex. The `swarm` skill tells Astra when and how to use the tools.
 | `swarm_inspect` | drill into `tasks`, `findings`, `roster`, `mail`, `errors`, `lead`, `member:<name>`, `events`, `prompts` |
 | `swarm_result` | the Lead's report split into Summary, Changes, Verification, Unresolved, Handoff, plus open warnings and `git diff --stat` |
 | `swarm_stop` | shut the runtime down; workspace changes stay |
-| `swarm_list` | swarms in this server process |
+| `swarm_resume` | continue a detached or finished swarm in a fresh runtime on the same worktree, seeded with the old board, the whole ledger, and the old Lead's last report |
+| `swarm_list` | swarms known to this server, including detached ones left behind by earlier server processes |
+
+Isolation is on by default: when the workspace is a git repository the team works in a worktree under `work/worktrees/<id>` on branch `swarm/<id>`, and `swarm_result` reports the branch for Astra to review and merge. Pass `isolate: false` to work directly in the checkout. Worktrees are kept until you remove them with `git worktree remove`.
 
 ## Privacy and cost
 
@@ -86,5 +89,5 @@ The live smoke is the first thing to run after setup. It has not been run in thi
 
 - Agent Teams is upstream-experimental: one process, one shared checkout, advisory write scopes, no automatic ownership release. Use `isolate: true` for anything risky and let Astra reconcile the branch.
 - No mid-turn cancel exists in the SDK protocol; `swarm_stop` ends the runtime.
-- Swarms live in the MCP server process; when Codex restarts the server, running swarms are stopped. Their logs remain under `work/swarms/`.
+- Swarms live in the MCP server process; when Codex restarts the server, running swarms lose their runtime. Each swarm persists `state.json` beside its log, so a new server lists them as `detached` and `swarm_resume` continues the work. This is a fresh team seeded from the old board and ledger, not a reattachment: the SDK server only creates sessions, it never resumes one, so the old teammates and their in-flight turns are gone.
 - The `personal` marketplace layout was copied from the plugins already present in this Codex install; if Codex does not list the plugin after restart, add a `[marketplaces.personal]` entry pointing at the cache directory.

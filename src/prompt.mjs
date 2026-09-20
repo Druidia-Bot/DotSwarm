@@ -34,6 +34,29 @@ function bullet(items) {
  * @param {string} spec.workspace
  * @param {boolean} [spec.isolated]
  */
+/**
+ * Section handed to the Lead of a resumed swarm: what the previous team had
+ * done, since the runtime cannot reattach to the old session.
+ * @param {object} resume
+ * @param {string} resume.fromSwarmId
+ * @param {Array<{id: string, subject: string, status: string, owner?: string|null}>} resume.tasks
+ * @param {string} [resume.lastLeadMessage]
+ * @param {number} resume.findingsCount
+ * @param {string} [resume.instruction]
+ */
+export function buildResumeSection(resume) {
+  const board = resume.tasks.length
+    ? resume.tasks.map((t) => `- ${t.id} [${t.status}${t.owner ? `, was ${t.owner}` : ''}] ${t.subject}`).join('\n')
+    : '- (the previous team had not created tasks yet)';
+  return `RESUMING PREVIOUS SWARM ${resume.fromSwarmId}
+A previous team worked on this objective in this same workspace and was interrupted. Its teammates and task board are gone, but its work on disk and its findings ledger remain. The ledger already holds ${resume.findingsCount} entries from that team, including its plan, decisions, warnings, and results. Read the whole ledger with mcp__findings__list_findings before planning; do not redo verified work, and do not trust unverified claims.
+
+PREVIOUS TASK BOARD (final state)
+${board}
+
+${resume.lastLeadMessage ? `PREVIOUS LEAD'S LAST MESSAGE\n${resume.lastLeadMessage}\n\n` : ''}${resume.instruction ? `ASTRA'S INSTRUCTION FOR THE RESUME\n${resume.instruction}\n\n` : ''}Re-create only the remaining work as tasks, verify what the previous team claimed as complete, then continue to the FINAL REPORT.`;
+}
+
 export function buildLeadPrompt(spec) {
   const roles = spec.roles?.length ? spec.roles : suggestedRoles(spec.maxAgents);
   const criteria = spec.acceptanceCriteria?.length
@@ -53,7 +76,7 @@ ${spec.objective.trim()}
 ${spec.plan ? `PLAN FROM ASTRA\n${spec.plan.trim()}\n\n` : ''}ACCEPTANCE CRITERIA
 ${criteria}
 
-${spec.context ? `CONTEXT PACKET\n${spec.context.trim()}\n\n` : ''}SUGGESTED TEAMMATE ROLES
+${spec.context ? `CONTEXT PACKET\n${spec.context.trim()}\n\n` : ''}${spec.resume ? `${buildResumeSection(spec.resume)}\n\n` : ''}SUGGESTED TEAMMATE ROLES
 ${bullet(roles)}
 Adjust the roster to the work; fewer teammates is better when the work is small.
 
