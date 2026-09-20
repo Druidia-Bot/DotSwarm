@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { DEFAULTS, PROFILE_NAME, dshBin, dshEnv, findingsServerPath, swarmsDir, toPosix, workDir } from './config.mjs';
+import { BENIGN_TOOL_ERRORS, DEFAULTS, PROFILE_NAME, dshBin, dshEnv, findingsServerPath, swarmsDir, toPosix, tokenPrices, workDir } from './config.mjs';
 import { DshClient } from './dsh-client.mjs';
 import { Findings } from './findings.mjs';
 import { buildLeadPrompt, buildSteerPrompt, parseReport } from './prompt.mjs';
@@ -163,6 +163,41 @@ export class Swarm {
     return { messageId, findingId: finding.id, note: 'Queued as the next Lead turn and recorded in the findings ledger as type steer, which the Lead checks each cycle.' };
   }
 
+  /** Hand the Lead a new board task instead of Astra doing the work itself. */
+  async addTask({ subject, description, writeScopes = [], blockedBy = [] }) {
+    const title = String(subject ?? '').trim();
+    const body = String(description ?? '').trim();
+    if (!title || !body) throw new Error('subject and description are required');
+    const lines = [
+      'TASK REQUEST from Astra. Create this task on the shared board with team_task_create, assign or announce an owner, and complete it under the usual verification rules.',
+      `Subject: ${title}`,
+      `Description: ${body}`,
+      ...(writeScopes.length ? [`Write scopes: ${writeScopes.join(', ')}`] : []),
+      ...(blockedBy.length ? [`Blocked by: ${blockedBy.join(', ')}`] : []),
+    ];
+    const result = await this.steer(lines.join('\n'));
+    return { ...result, note: 'Task request queued as a steer and recorded in the ledger; the Lead creates the board task.' };
+  }
+
+  /** Open items the Lead raised for Astra: questions, and anything scoped to astra. */
+  openQuestions(limit = 10) {
+    return this.findings.readAll()
+      .filter((f) => f.type === 'question' || (f.scope === 'astra' && f.type !== 'steer'))
+      .slice(-limit)
+      .map((f) => ({ id: f.id, author: f.author, message: f.message.slice(0, 500) }));
+  }
+
+  cost() {
+    const tokens = this.state.tokens();
+    const prices = tokenPrices();
+    return {
+      swarmTokens: tokens,
+      byMember: this.state.tokensByMember(),
+      ...(prices ? { estimatedUsd: Number(((tokens.input * prices.input + tokens.output * prices.output) / 1_000_000).toFixed(4)) } : {}),
+      note: 'DeepSeek tokens only. Astra spends separately; keep Astra to planning, steering, and review.',
+    };
+  }
+
   steerDelivery() {
     const steers = this.prompts.filter((p) => p.kind === 'steer');
     return { sent: steers.length, read: steers.filter((p) => this.state.userMessageIds.has(p.messageId)).length };
@@ -193,10 +228,13 @@ export class Swarm {
     return Math.round((end - Date.parse(this.startedAt ?? new Date().toISOString())) / 1000);
   }
 
-  status() {
+  status({ sinceFinding } = {}) {
     const s = this.state;
     const findings = this.findings.readAll();
     const lead = s.lastLeadText();
+    const newFindings = sinceFinding
+      ? this.findings.list({ since: sinceFinding, limit: 20 }).filter((f) => f.type !== 'steer')
+      : findings.slice(-5);
     return {
       swarmId: this.id,
       phase: this.phase,
@@ -209,9 +247,14 @@ export class Swarm {
       mail: { queued: s.mail.queued, delivered: s.mail.delivered },
       steers: this.steerDelivery(),
       permissionMode: this.spec.permissionMode,
-      findings: { count: findings.length, latest: findings.slice(-5).map((f) => `${f.id} [${f.type}] ${f.scope}: ${f.message.slice(0, 200)}`) },
-      toolErrors: s.errors.slice(-3),
-      tokens: s.tokens(),
+      findings: {
+        count: findings.length,
+        latestId: findings.at(-1)?.id ?? null,
+        [sinceFinding ? 'new' : 'latest']: newFindings.map((f) => `${f.id} [${f.type}] ${f.scope}: ${f.message.slice(0, 200)}`),
+      },
+      openQuestions: this.openQuestions(),
+      toolErrors: s.errors.filter((e) => !BENIGN_TOOL_ERRORS.has(e.code)).slice(-3),
+      cost: this.cost(),
       lastLeadMessage: lead.slice(-800),
       lastEventAt: s.lastEventAt,
       reportReady: this.phase === 'idle' && parseReport(lead) !== null,
@@ -282,8 +325,9 @@ export class Swarm {
       ...(this.branch ? { branch: this.branch } : {}),
       report: report ?? { raw: lead.slice(-6000) },
       findings: this.findings.readAll().filter((f) => f.type === 'warning' || f.type === 'failure' || f.type === 'question'),
+      openQuestions: this.openQuestions(),
       tasks: this.state.taskCounts(),
-      tokens: this.state.tokens(),
+      cost: this.cost(),
       elapsedSeconds: this.elapsedSeconds(),
     };
     if (await isGitRepo(this.workspace)) {

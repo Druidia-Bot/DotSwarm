@@ -26,8 +26,22 @@ export class Findings {
     return out;
   }
 
-  list({ scope, type, limit = 50 } = {}) {
+  /** Numeric part of an id such as F-012, or 0 when absent or malformed. */
+  static idNumber(id) {
+    const match = /^F-(\d+)$/.exec(String(id ?? ''));
+    return match ? Number(match[1]) : 0;
+  }
+
+  lastId() {
+    return this.readAll().at(-1)?.id ?? null;
+  }
+
+  list({ scope, type, since, limit = 50 } = {}) {
     let rows = this.readAll();
+    if (since) {
+      const floor = Findings.idNumber(since);
+      rows = rows.filter((r) => Findings.idNumber(r.id) > floor);
+    }
     if (scope) rows = rows.filter((r) => r.scope === scope || r.scope.startsWith(scope + '/'));
     if (type) rows = rows.filter((r) => r.type === type);
     return rows.slice(-Math.max(1, Math.min(limit, 500)));

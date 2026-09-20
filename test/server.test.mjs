@@ -16,7 +16,7 @@ test('the Codex plugin launcher starts the MCP server and exposes the swarm tool
   const client = new Client({ name: 'test', version: '0' });
   await client.connect(transport);
   const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-  assert.deepEqual(tools, ['swarm_inspect', 'swarm_list', 'swarm_result', 'swarm_start', 'swarm_status', 'swarm_steer', 'swarm_stop']);
+  assert.deepEqual(tools, ['swarm_inspect', 'swarm_list', 'swarm_result', 'swarm_start', 'swarm_status', 'swarm_steer', 'swarm_stop', 'swarm_task_add']);
   const list = await client.callTool({ name: 'swarm_list', arguments: {} });
   assert.equal(list.content[0].text, '[]');
   const missing = await client.callTool({ name: 'swarm_status', arguments: { swarm_id: 'nope' } });

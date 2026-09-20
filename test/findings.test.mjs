@@ -18,6 +18,9 @@ test('ledger appends numbered rows and filters by scope and type', () => {
   assert.equal(b.id, 'F-002');
   assert.equal(f.list({ scope: 'db' }).length, 1);
   assert.equal(f.list({ type: 'decision' })[0].id, 'F-001');
+  assert.deepEqual(f.list({ since: 'F-001' }).map((r) => r.id), ['F-002']);
+  assert.deepEqual(f.list({ since: 'F-002' }), []);
+  assert.equal(f.lastId(), 'F-002');
   assert.throws(() => f.append({ type: 'nope', scope: 's', message: 'm' }), /type must be/);
   assert.throws(() => f.append({ type: 'warning', scope: '', message: 'm' }), /scope is required/);
 });
@@ -39,5 +42,7 @@ test('findings MCP server serves record_finding and list_findings over stdio', a
   assert.match(list.content[0].text, /F-001 \[failure\] \(tests\) by tester/);
   const bad = await client.callTool({ name: 'record_finding', arguments: { author: 'x', type: 'bogus', scope: 's', message: 'm' } });
   assert.equal(bad.isError, true);
+  const none = await client.callTool({ name: 'list_findings', arguments: { since: 'F-001' } });
+  assert.match(none.content[0].text, /No findings newer than F-001/);
   await client.close();
 });

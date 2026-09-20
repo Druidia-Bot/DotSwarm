@@ -40,7 +40,15 @@ test('start, observe, steer, result, stop against the fake runtime', async (t) =
   assert.equal(status.roster.find((r) => r.name === 'worker').phase, 'active');
   assert.equal(status.mail.delivered, 1);
   assert.equal(status.toolErrors[0].code, 'ENOENT');
-  assert.equal(status.tokens.input, 600);
+  assert.equal(status.cost.swarmTokens.input, 600);
+  assert.equal(status.cost.byMember.worker.input, 100);
+  assert.equal(status.cost.estimatedUsd, undefined);
+  assert.deepEqual(status.openQuestions, []);
+  swarm.findings.append({ author: 'lead', type: 'question', scope: 'astra', message: 'may I edit wrangler.jsonc?' });
+  assert.equal(swarm.status().openQuestions[0].message, 'may I edit wrangler.jsonc?');
+  assert.equal(swarm.status({ sinceFinding: 'F-001' }).findings.new.length, 0);
+  assert.equal(swarm.status({ sinceFinding: 'F-000' }).findings.new.length, 1);
+  assert.equal(swarm.status().findings.latestId, 'F-001');
 
   const result = await swarm.result();
   assert.equal(result.complete, true);
@@ -54,7 +62,7 @@ test('start, observe, steer, result, stop against the fake runtime', async (t) =
   assert.equal(swarm.inspect('events', 5).length, 5);
 
   const steered = await swarm.steer('also add a newline');
-  assert.equal(steered.findingId, 'F-001');
+  assert.equal(steered.findingId, 'F-002');
   assert.equal(swarm.phase, 'running');
   const steerDeadline = Date.now() + 5000;
   while (swarm.phase !== 'idle' && Date.now() < steerDeadline) await swarm.waitForChange(500);
@@ -62,7 +70,13 @@ test('start, observe, steer, result, stop against the fake runtime', async (t) =
   assert.equal(swarm.inspect('prompts').length, 2);
   assert.deepEqual(swarm.status().steers, { sent: 1, read: 1 });
   assert.equal(swarm.status().permissionMode, 'danger-full-access');
-  assert.equal(swarm.inspect('findings')[0].type, 'steer');
+  assert.equal(swarm.inspect('findings')[1].type, 'steer');
+  const task = await swarm.addTask({ subject: 'Fix wrangler config', description: 'set the var', writeScopes: ['wrangler.jsonc'] });
+  assert.equal(task.findingId, 'F-003');
+  assert.match(swarm.inspect('findings')[2].message, /^TASK REQUEST[\s\S]*Subject: Fix wrangler config[\s\S]*Write scopes: wrangler\.jsonc/);
+  await assert.rejects(swarm.addTask({ subject: '', description: 'x' }), /required/);
+  const benign = swarm.status();
+  assert.ok(!benign.toolErrors.some((e) => e.code === 'FS_NOT_OBSERVED'));
 
   assert.equal(manager.list()[0].swarmId, swarm.id);
   const stopped = await swarm.stop();

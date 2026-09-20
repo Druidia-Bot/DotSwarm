@@ -60,8 +60,9 @@ Restart Codex. The `swarm` skill tells Astra when and how to use the tools.
 | Tool | Purpose |
 |---|---|
 | `swarm_start` | objective, plan (5 to 15 work units), acceptance criteria, context packet, absolute workspace, `max_agents`, optional `isolate` (git worktree on `swarm/<id>`), model and effort |
-| `swarm_status` | compressed state; `wait_ms` blocks until something changes instead of polling |
-| `swarm_steer` | one instruction to the Lead, framed as `[Astra steer]` |
+| `swarm_status` | compressed state; `wait_ms` blocks until something changes instead of polling; `since_finding` returns only new ledger entries; lists `openQuestions` the Lead raised for Astra, filtered tool errors, and a `cost` line |
+| `swarm_steer` | one instruction to the Lead, delivered as its next turn and immediately as a ledger entry of type `steer` |
+| `swarm_task_add` | hand the Lead a new board task instead of Astra editing the workspace itself |
 | `swarm_inspect` | drill into `tasks`, `findings`, `roster`, `mail`, `errors`, `lead`, `member:<name>`, `events`, `prompts` |
 | `swarm_result` | the Lead's report split into Summary, Changes, Verification, Unresolved, Handoff, plus open warnings and `git diff --stat` |
 | `swarm_stop` | shut the runtime down; workspace changes stay |
@@ -69,7 +70,7 @@ Restart Codex. The `swarm` skill tells Astra when and how to use the tools.
 
 ## Privacy and cost
 
-The generated home disables telemetry, the upstream session-log contributor, and plugin-inventory contributions. Nothing under `work/` is committed. Each swarm writes `work/swarms/<id>/` with the lead prompt, an `events.jsonl` of every runtime notification, the findings ledger, and the per-swarm patch. Token counts per session are summed into status. DeepSeek is charged for every team member; Astra pays only for planning, checkpoints, and review.
+The generated home disables telemetry, the upstream session-log contributor, and plugin-inventory contributions. Nothing under `work/` is committed. Set `DEEPASTRA_PRICE_INPUT_PER_M` and `DEEPASTRA_PRICE_OUTPUT_PER_M` (USD per million tokens) to get an `estimatedUsd` in the cost line. The skill's foreman rule matters for Astra's own spend: Astra must not edit the workspace or run its tests while a swarm runs; fixes become `swarm_task_add`, decisions become `swarm_steer`. Each swarm writes `work/swarms/<id>/` with the lead prompt, an `events.jsonl` of every runtime notification, the findings ledger, and the per-swarm patch. Token counts per session are summed into status. DeepSeek is charged for every team member; Astra pays only for planning, checkpoints, and review.
 
 ## Verification
 

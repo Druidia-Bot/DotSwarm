@@ -81,6 +81,18 @@ export function dshEnv(extra = {}) {
   };
 }
 
+/** Tool-result error codes that are the harness's own guards working, not team failures. */
+export const BENIGN_TOOL_ERRORS = new Set([
+  'FS_NOT_OBSERVED', 'FS_STALE_VERSION', 'FS_EDIT_NOT_FOUND', 'FS_NOT_FOUND', 'SEARCH_FAILED',
+]);
+
+/** Optional USD per million tokens for the cost line; unset means tokens only. */
+export function tokenPrices() {
+  const input = Number(process.env.DEEPASTRA_PRICE_INPUT_PER_M);
+  const output = Number(process.env.DEEPASTRA_PRICE_OUTPUT_PER_M);
+  return Number.isFinite(input) && Number.isFinite(output) && (input > 0 || output > 0) ? { input, output } : null;
+}
+
 export function toPosix(p) {
   return p.split(path.sep).join('/');
 }

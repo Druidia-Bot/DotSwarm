@@ -193,4 +193,13 @@ export class SwarmState extends EventEmitter {
     for (const s of this.sessions.values()) { input += s.tokens.input; output += s.tokens.output; }
     return { input, output };
   }
+
+  tokensByMember() {
+    const out = {};
+    for (const s of this.sessions.values()) {
+      if (s.tokens.input === 0 && s.tokens.output === 0) continue;
+      out[s.name ?? s.id] = { ...s.tokens };
+    }
+    return out;
+  }
 }

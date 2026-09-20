@@ -7,7 +7,7 @@ export const REPORT_HEADINGS = ['Summary', 'Changes', 'Verification', 'Unresolve
 export const WORKER_PROTOCOL = `TEAM PROTOCOL (give this to every teammate verbatim)
 Before starting:
 - Call team_task_list and team_task_get for your assigned task. Claim it with team_task_update action=claim using the current revision.
-- Call mcp__findings__list_findings for your scope before touching code.
+- Call mcp__findings__list_findings for your scope before touching code. Later calls pass since with the last id you saw.
 While working:
 - Keep your task's write scopes. If you must touch files outside them, message the lead first.
 - Record discoveries that affect other tasks, warnings, and failures with mcp__findings__record_finding (author = your teammate name). Do not record routine progress.
@@ -61,7 +61,8 @@ HOW TO RUN THE SWARM
 1. Inspect the workspace briefly, then create the shared tasks with team_task_create: one per meaningful work unit, each with a complete description, acceptance criteria, write scopes, and blocked_by dependencies. Record the task plan as a finding of type decision with author lead.
 2. Spawn teammates. Each spawn prompt must contain: the objective in one paragraph, the task ids they own, the acceptance criteria for those tasks, the exact verification commands, and the TEAM PROTOCOL below verbatim.
 3. Monitor with list_agents, team_task_list, mcp__findings__list_findings, and wait_agent. After each wakeup ask: what do we know, what conflicts, what is unverified, is another teammate actually useful? Redirect with send_message. Reassign or reopen tasks that stall.
-   Astra's instructions arrive two ways: as a [Astra steer] message at your next turn, and immediately as a finding of type steer with author astra. Call mcp__findings__list_findings with type steer after every wait_agent and before completing any task, and apply new steers at once. Each steer id counts once; do not re-apply one you already handled.
+   Astra's instructions arrive two ways: as a [Astra steer] message at your next turn, and immediately as a finding of type steer with author astra. After every wait_agent and before completing any task, call mcp__findings__list_findings with since set to the last finding id you have seen, so you read only new entries; apply new steers at once. A steer beginning "TASK REQUEST" becomes a task on the board with team_task_create. Each steer id counts once; do not re-apply one you already handled.
+   Anything you need from Astra (a decision, a file you must not edit, missing configuration, an approval) is a finding of type question with scope astra. Astra sees those directly; do not bury them in messages. When Astra answers, record the outcome as a finding of type result that names the question id.
    If a build tool, test runner, or package install fails with EPERM, spawn errors, or a sandbox escalation message, do not reverse-engineer the tool. Record a finding of type failure with the exact error and stop that workstream; Astra restarts the swarm with a different permission mode.
 4. When all tasks are complete, review the complete diff yourself, run the acceptance verification, and fix or delegate anything that fails.
 5. Finish with the FINAL REPORT format below and nothing after it. Do not stop while a required teammate is still running.

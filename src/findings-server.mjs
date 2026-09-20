@@ -33,11 +33,12 @@ const TOOLS = [
   },
   {
     name: 'list_findings',
-    description: 'Read the shared team findings ledger, newest last. Filter by scope prefix or type.',
+    description: 'Read the shared team findings ledger, newest last. Pass since with the last finding id you have seen to receive only newer entries; filter by scope prefix or type.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
+        since: { type: 'string', description: 'Last finding id already seen, such as F-012. Only newer entries are returned.' },
         scope: { type: 'string' },
         type: { type: 'string', enum: FINDING_TYPES },
         limit: { type: 'integer', minimum: 1, maximum: 500 },
@@ -57,7 +58,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
     if (name === 'list_findings') {
       const rows = findings.list(args);
-      return { content: [{ type: 'text', text: rows.length ? Findings.render(rows) : 'No findings recorded yet.' }] };
+      const empty = args.since ? `No findings newer than ${args.since}.` : 'No findings recorded yet.';
+      return { content: [{ type: 'text', text: rows.length ? Findings.render(rows) : empty }] };
     }
     return { isError: true, content: [{ type: 'text', text: `Unknown tool ${name}` }] };
   } catch (error) {

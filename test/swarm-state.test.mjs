@@ -30,6 +30,7 @@ test('folds team events into roster, tasks, mail, tokens, and errors', () => {
   assert.equal(s.mail.recent[0].from, 'worker');
   assert.equal(s.mail.recent[0].to, 'lead');
   assert.deepEqual(s.tokens(), { input: 110, output: 55 });
+  assert.deepEqual(s.tokensByMember(), { lead: { input: 100, output: 50 }, worker: { input: 10, output: 5 } });
   assert.equal(s.errors[0].code, 'ENOENT');
   assert.equal(s.lastLeadText(), 'lead says');
   assert.equal(s.sessions.get('w1').toolCalls, 1);

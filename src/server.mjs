@@ -35,7 +35,7 @@ const TOOLS = [
   },
   {
     name: 'swarm_status',
-    description: 'Compact state of a swarm: phase, roster, task board counts, latest findings, token use, last Lead message. Pass wait_ms to block until something changes (up to 600000) instead of polling.',
+    description: 'Compact state of a swarm: phase, roster, task counts, open questions for you, new findings since the id you pass, filtered tool errors, cost, last Lead message. Pass wait_ms to block until something changes (up to 600000) instead of polling, and since_finding with the latestId from your previous call so you only read new ledger entries.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -43,6 +43,23 @@ const TOOLS = [
       properties: {
         swarm_id: { type: 'string' },
         wait_ms: { type: 'integer', minimum: 0, maximum: 600_000, description: 'Block for a change first. Use 60000 to 300000 while the team is working.' },
+        since_finding: { type: 'string', description: 'The latestId from your previous status call; only newer findings are returned.' },
+      },
+    },
+  },
+  {
+    name: 'swarm_task_add',
+    description: 'Hand the Lead a new task for the shared board instead of doing the work yourself. Use this for root configs, docs, fixes you noticed, or anything you would otherwise edit while the swarm runs.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['swarm_id', 'subject', 'description'],
+      properties: {
+        swarm_id: { type: 'string' },
+        subject: { type: 'string', description: 'Concise task title.' },
+        description: { type: 'string', description: 'Complete details, acceptance criteria, and the verification command.' },
+        write_scopes: { type: 'array', items: { type: 'string' }, description: 'Workspace-relative paths the task may modify.' },
+        blocked_by: { type: 'array', items: { type: 'string' }, description: 'Existing board task ids that must complete first.' },
       },
     },
   },
@@ -118,10 +135,14 @@ async function call(name, args) {
     case 'swarm_status': {
       const swarm = manager.get(args.swarm_id);
       if (args.wait_ms) await swarm.waitForChange(args.wait_ms);
-      return swarm.status();
+      return swarm.status({ sinceFinding: args.since_finding });
     }
     case 'swarm_steer':
       return manager.get(args.swarm_id).steer(String(args.instruction ?? ''));
+    case 'swarm_task_add':
+      return manager.get(args.swarm_id).addTask({
+        subject: args.subject, description: args.description, writeScopes: args.write_scopes ?? [], blockedBy: args.blocked_by ?? [],
+      });
     case 'swarm_inspect':
       return manager.get(args.swarm_id).inspect(String(args.scope ?? ''), args.limit ?? 10);
     case 'swarm_result': {
