@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const FINDING_TYPES = ['discovery', 'warning', 'failure', 'decision', 'question', 'result'];
+export const FINDING_TYPES = ['discovery', 'warning', 'failure', 'decision', 'question', 'result', 'steer'];
 
 export class Findings {
   constructor(file) {

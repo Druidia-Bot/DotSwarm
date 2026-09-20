@@ -153,9 +153,19 @@ export class Swarm {
 
   async steer(instruction) {
     if (!this.alive) throw new Error(`swarm ${this.id} is ${this.phase}; it cannot be steered`);
-    const messageId = await this.#prompt(buildSteerPrompt(instruction), 'steer');
+    const text = String(instruction ?? '').trim();
+    if (!text) throw new Error('instruction is required');
+    // The SDK protocol has no mid-turn steer: a prompt is claimed at the next turn. The
+    // ledger entry reaches a Lead that is still mid-turn, because it reads findings each cycle.
+    const finding = this.findings.append({ author: 'astra', type: 'steer', scope: 'astra', message: text });
+    const messageId = await this.#prompt(buildSteerPrompt(text, finding.id), 'steer');
     this.phase = 'running';
-    return { messageId };
+    return { messageId, findingId: finding.id, note: 'Queued as the next Lead turn and recorded in the findings ledger as type steer, which the Lead checks each cycle.' };
+  }
+
+  steerDelivery() {
+    const steers = this.prompts.filter((p) => p.kind === 'steer');
+    return { sent: steers.length, read: steers.filter((p) => this.state.userMessageIds.has(p.messageId)).length };
   }
 
   /** Resolve on the next significant change, or after timeoutMs. Returns whether a change happened. */
@@ -197,6 +207,8 @@ export class Swarm {
       roster: s.roster(),
       tasks: { counts: s.taskCounts(), board: s.taskBoard() },
       mail: { queued: s.mail.queued, delivered: s.mail.delivered },
+      steers: this.steerDelivery(),
+      permissionMode: this.spec.permissionMode,
       findings: { count: findings.length, latest: findings.slice(-5).map((f) => `${f.id} [${f.type}] ${f.scope}: ${f.message.slice(0, 200)}`) },
       toolErrors: s.errors.slice(-3),
       tokens: s.tokens(),
@@ -296,7 +308,7 @@ export function defaultLaunch({ swarm, patchFile }) {
     command: process.execPath,
     args: [bin, '--profile', PROFILE_NAME, '--patch', patchFile],
     cwd: swarm.workspace,
-    env: dshEnv({ SWARM_ID: swarm.id }),
+    env: dshEnv({ SWARM_ID: swarm.id, DSH_PERMISSION_MODE: swarm.spec.permissionMode }),
     initializeTimeoutMs: DEFAULTS.initializeTimeoutMs,
     requestTimeoutMs: DEFAULTS.requestTimeoutMs,
   });
@@ -324,6 +336,7 @@ export class SwarmManager {
       maxAgents,
       workspace,
       isolate: Boolean(input.isolate),
+      permissionMode: DEFAULTS.permissionModes.includes(input.permission_mode) ? input.permission_mode : DEFAULTS.permissionMode,
       provider: input.provider ? String(input.provider) : DEFAULTS.provider,
       model: input.model ? String(input.model) : DEFAULTS.model,
       reasoningEffort: input.reasoning_effort ? String(input.reasoning_effort) : undefined,

@@ -28,6 +28,7 @@ export class SwarmState extends EventEmitter {
     this.tasks = new Map(); // task id -> snapshot
     this.mail = { queued: 0, delivered: 0, recent: [] };
     this.receipts = new Set();
+    this.userMessageIds = new Set(); // prompts actually claimed by a Lead turn
     this.subagentsFinished = [];
     this.errors = [];
     this.eventCount = 0;
@@ -115,6 +116,9 @@ export class SwarmState extends EventEmitter {
         return true;
       case 'agent/inbox/spliced':
         for (const inserted of data.inserted ?? []) if (inserted?.id) this.receipts.add(inserted.id);
+        return false;
+      case 'user/message':
+        if (sessionId === this.rootSessionId && data.id) this.userMessageIds.add(data.id);
         return false;
       case 'assistant/message': {
         const text = textOf(data.message?.content);

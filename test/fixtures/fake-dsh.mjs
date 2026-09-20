@@ -20,6 +20,7 @@ let promptCount = 0;
 function runTurn(sessionId, messageId, text) {
   event(sessionId, 'agent/inbox/spliced', { inserted: [{ id: messageId }] });
   notify('session.status', { sessionId, status: 'running' });
+  event(sessionId, 'user/message', { id: messageId, role: 'user', content: [{ type: 'text', text }], source: { kind: 'user' } });
   const teammate = 'sess-worker-1';
   if (promptCount === 1) {
     event(sessionId, 'team/task', { version: 2, teamId: sessionId, task: { id: 'task-1', revision: 1, subject: 'Explore', description: 'look', status: 'pending', blockedBy: [], writeScopes: [] } });

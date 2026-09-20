@@ -26,6 +26,7 @@ const TOOLS = [
         max_agents: { type: 'integer', minimum: 1, maximum: DEFAULTS.maxAgentsCap, description: `Teammate cap (default ${DEFAULTS.maxAgents}). Small tasks need 1 or 2.` },
         roles: { type: 'array', items: { type: 'string' }, description: 'Optional role hints such as "explorer: ..." or "tester: ...".' },
         isolate: { type: 'boolean', description: 'Run in a fresh git worktree on branch swarm/<id> so the main checkout stays untouched. Requires a git repository.' },
+        permission_mode: { type: 'string', enum: DEFAULTS.permissionModes, description: `Runtime sandbox for the team (default ${DEFAULTS.permissionMode}). workspace-write confines writes to the workspace but on Windows it also blocks spawning native toolchain binaries such as esbuild and workerd, so npm install, vitest, Astro, and wrangler fail. Use danger-full-access for real build work and rely on the objective's boundaries; use read-only for exploration-only swarms.` },
         model: { type: 'string', description: `Model for every team member (default ${DEFAULTS.model}).` },
         reasoning_effort: { type: 'string', enum: ['off', 'low', 'high', 'max'], description: 'DeepSeek reasoning effort for the team.' },
         max_tokens: { type: 'integer', minimum: 1024, description: 'Per-response output token cap for team members.' },
@@ -47,7 +48,7 @@ const TOOLS = [
   },
   {
     name: 'swarm_steer',
-    description: 'Send an instruction to the Team Lead: redirect, add a constraint, answer a question, or ask for a specific check. The Lead applies it and propagates to teammates.',
+    description: 'Send an instruction to the Team Lead: redirect, add a constraint, answer a question, or ask for a specific check. Delivered as the Lead\'s next turn and immediately as a findings-ledger entry of type steer that the Lead checks each cycle. swarm_status reports steers sent versus read.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,

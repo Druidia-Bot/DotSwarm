@@ -53,12 +53,16 @@ test('start, observe, steer, result, stop against the fake runtime', async (t) =
   assert.throws(() => swarm.inspect('member:nobody'), /unknown member/);
   assert.equal(swarm.inspect('events', 5).length, 5);
 
-  await swarm.steer('also add a newline');
+  const steered = await swarm.steer('also add a newline');
+  assert.equal(steered.findingId, 'F-001');
   assert.equal(swarm.phase, 'running');
   const steerDeadline = Date.now() + 5000;
   while (swarm.phase !== 'idle' && Date.now() < steerDeadline) await swarm.waitForChange(500);
   assert.match((await swarm.result()).report.summary, /Steered/);
   assert.equal(swarm.inspect('prompts').length, 2);
+  assert.deepEqual(swarm.status().steers, { sent: 1, read: 1 });
+  assert.equal(swarm.status().permissionMode, 'danger-full-access');
+  assert.equal(swarm.inspect('findings')[0].type, 'steer');
 
   assert.equal(manager.list()[0].swarmId, swarm.id);
   const stopped = await swarm.stop();
@@ -78,4 +82,6 @@ test('spec validation', () => {
   assert.throws(() => manager.normalizeSpec({ workspace: os.tmpdir() }), /objective is required/);
   assert.throws(() => manager.normalizeSpec({ objective: 'x', workspace: path.join(os.tmpdir(), 'nope-' + Date.now()) }), /does not exist/);
   assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), max_agents: 99 }).maxAgents, 7);
+  assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), permission_mode: 'read-only' }).permissionMode, 'read-only');
+  assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), permission_mode: 'bogus' }).permissionMode, 'danger-full-access');
 });

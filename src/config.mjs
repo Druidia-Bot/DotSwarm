@@ -13,6 +13,9 @@ export const DEFAULTS = Object.freeze({
   model: 'deepseek-v4-flash',
   maxAgents: 3,
   maxAgentsCap: 7,
+  // workspace-write blocks spawning native toolchain binaries on Windows (esbuild, workerd).
+  permissionMode: 'danger-full-access',
+  permissionModes: ['danger-full-access', 'workspace-write', 'read-only'],
   initializeTimeoutMs: 120_000,
   requestTimeoutMs: 30_000,
 });

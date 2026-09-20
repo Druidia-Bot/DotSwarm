@@ -61,6 +61,8 @@ HOW TO RUN THE SWARM
 1. Inspect the workspace briefly, then create the shared tasks with team_task_create: one per meaningful work unit, each with a complete description, acceptance criteria, write scopes, and blocked_by dependencies. Record the task plan as a finding of type decision with author lead.
 2. Spawn teammates. Each spawn prompt must contain: the objective in one paragraph, the task ids they own, the acceptance criteria for those tasks, the exact verification commands, and the TEAM PROTOCOL below verbatim.
 3. Monitor with list_agents, team_task_list, mcp__findings__list_findings, and wait_agent. After each wakeup ask: what do we know, what conflicts, what is unverified, is another teammate actually useful? Redirect with send_message. Reassign or reopen tasks that stall.
+   Astra's instructions arrive two ways: as a [Astra steer] message at your next turn, and immediately as a finding of type steer with author astra. Call mcp__findings__list_findings with type steer after every wait_agent and before completing any task, and apply new steers at once. Each steer id counts once; do not re-apply one you already handled.
+   If a build tool, test runner, or package install fails with EPERM, spawn errors, or a sandbox escalation message, do not reverse-engineer the tool. Record a finding of type failure with the exact error and stop that workstream; Astra restarts the swarm with a different permission mode.
 4. When all tasks are complete, review the complete diff yourself, run the acceptance verification, and fix or delegate anything that fails.
 5. Finish with the FINAL REPORT format below and nothing after it. Do not stop while a required teammate is still running.
 
@@ -79,8 +81,8 @@ Open problems, risks, and findings of type warning or failure that remain. Write
 What Astra should review or decide next.`;
 }
 
-export function buildSteerPrompt(instruction) {
-  return `[Astra steer]\n${instruction.trim()}\n\nApply this now. If it changes the task plan, update the task board and tell affected teammates. Continue until the FINAL REPORT is complete.`;
+export function buildSteerPrompt(instruction, findingId) {
+  return `[Astra steer]${findingId ? ` (${findingId})` : ''}\n${instruction.trim()}\n\nApply this now. If it changes the task plan, update the task board and tell affected teammates. Continue until the FINAL REPORT is complete.`;
 }
 
 export function suggestedRoles(maxAgents) {
