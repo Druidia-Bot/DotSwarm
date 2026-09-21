@@ -25,5 +25,5 @@
       "Resume the detached swarm and finish the remaining work."
     ]
   },
-  "mcpServers": "./.mcp.json"
+  "mcpServers": "./.codex-mcp.json"
 }

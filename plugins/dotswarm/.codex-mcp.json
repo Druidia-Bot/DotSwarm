@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "dotswarm": {
+      "command": "node",
+      "args": ["./server.mjs"],
+      "cwd": "."
+    }
+  }
+}
