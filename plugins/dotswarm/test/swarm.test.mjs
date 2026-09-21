@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-process.env.DEEPASTRA_SWARM_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'deepastra-swarm-test-'));
+process.env.DOTSWARM_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-swarm-test-'));
 const { SwarmManager } = await import('../src/swarm.mjs');
 const { DshClient } = await import('../src/dsh-client.mjs');
 const fake = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-dsh.mjs');
@@ -21,7 +21,7 @@ const fakeLaunch = (mode) => ({ swarm, patchFile }) => {
 };
 
 test('start, observe, steer, result, stop against the fake runtime', async (t) => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'deepastra-ws-'));
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-ws-'));
   const manager = new SwarmManager({ launch: fakeLaunch('normal') });
   t.after(() => manager.shutdownAll());
   const swarm = await manager.start({
@@ -86,14 +86,14 @@ test('start, observe, steer, result, stop against the fake runtime', async (t) =
 });
 
 test('a runtime that dies during start reports failed with stderr', async () => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'deepastra-ws-'));
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-ws-'));
   const manager = new SwarmManager({ launch: fakeLaunch('exit-early') });
   await assert.rejects(manager.start({ objective: 'x', workspace }), /boot failure/);
   assert.equal(manager.list().find((s) => s.workspace === workspace).phase, 'failed');
 });
 
 function tempGitRepo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'deepastra-repo-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-repo-'));
   const run = (args) => execFileSync('git', args, { cwd: dir, windowsHide: true, stdio: 'pipe' });
   run(['init', '-q']);
   run(['config', 'user.email', 't@example.com']);

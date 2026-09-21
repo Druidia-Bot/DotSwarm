@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 
 export const BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-sdk-app', TEAM_PROFILE_PACKAGE];
 
-export const PROFILE_PATCH = `# DeepAstra swarm profile layer. Privacy defaults: never contribute session logs
+export const PROFILE_PATCH = `# DotSwarm profile layer. Privacy defaults: never contribute session logs
 # or plugin inventory to upstream requests. The per-swarm patch adds the findings server.
 - id: session-log-deepseek
   config:
@@ -45,7 +45,7 @@ export function teamBundleInstalled() {
 
 export async function runDsh(args, { timeout = 300_000 } = {}) {
   const bin = dshBin();
-  if (!fs.existsSync(bin)) throw new Error(`dsh is not installed at ${bin}; run: npm ci --prefix harness --ignore-scripts`);
+  if (!fs.existsSync(bin)) throw new Error(`dsh is not installed at ${bin}; run swarm_setup or: npm run setup`);
   try {
     const { stdout, stderr } = await execFileAsync(process.execPath, [bin, ...args], {
       env: dshEnv(), cwd: dshHome(), windowsHide: true, timeout, maxBuffer: 16 * 1024 * 1024,

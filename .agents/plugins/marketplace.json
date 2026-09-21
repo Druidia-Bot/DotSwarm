@@ -1,0 +1,19 @@
+{
+  "name": "dotswarm",
+  "interface": {
+    "displayName": "DotSwarm"
+  },
+  "plugins": [
+    {
+      "name": "dotswarm",
+      "source": {
+        "source": "local",
+        "path": "./plugins/dotswarm"
+      },
+      "policy": {
+        "installation": "AVAILABLE"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

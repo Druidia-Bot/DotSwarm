@@ -1,9 +1,0 @@
-{
-  "name": "deepastra-swarm-dsh-core",
-  "private": true,
-  "version": "0.0.0",
-  "description": "Pinned DeepSeek Harness executable. Nothing of ours lives in node_modules.",
-  "dependencies": {
-    "@deepseek-ai/dsh": "0.1.5-rc.2"
-  }
-}

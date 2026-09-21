@@ -1,5 +1,4 @@
 node_modules/
-harness/node_modules/
 work/
 .runtime/
 *.log

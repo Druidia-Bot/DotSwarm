@@ -1,0 +1,22 @@
+{
+  "name": "dotswarm",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Codex plugin: the coordinating model plans and supervises, a DeepSeek Harness Agent Team of Flash workers does the work",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "setup": "node src/cli.mjs setup",
+    "doctor": "node src/cli.mjs doctor",
+    "serve": "node server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "smoke:live": "node src/cli.mjs smoke --live",
+    "monitor": "node scripts/monitor.mjs"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.26.0"
+  }
+}

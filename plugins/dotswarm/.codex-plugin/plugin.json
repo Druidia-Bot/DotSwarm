@@ -1,0 +1,29 @@
+{
+  "name": "dotswarm",
+  "version": "1.0.0",
+  "description": "Hand planned coding work to a DeepSeek Flash agent team that coordinates through a shared task board, mailbox, and findings ledger while your model supervises.",
+  "author": {
+    "name": "Druidia Bot",
+    "url": "https://github.com/Druidia-Bot"
+  },
+  "homepage": "https://github.com/Druidia-Bot/DotSwarm",
+  "repository": "https://github.com/Druidia-Bot/DotSwarm",
+  "license": "MIT",
+  "keywords": ["agents", "swarm", "deepseek", "multi-agent", "coding", "orchestration"],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "DotSwarm",
+    "shortDescription": "Delegate planned work to a DeepSeek agent team.",
+    "longDescription": "DotSwarm lets the model running your Codex session act as a foreman: it plans, hands the work to a team of inexpensive DeepSeek Flash agents running in the DeepSeek Harness, receives compressed state, steers on exceptions, audits the result, and sends a refactor team before a final sweep. Teams coordinate through a shared task board, durable mailbox, and findings ledger, and design work is iterated from real screenshots.",
+    "developerName": "Druidia Bot",
+    "category": "Productivity",
+    "capabilities": ["Multi-agent coding", "Task board and mailbox", "Screenshot-driven design iteration"],
+    "websiteURL": "https://github.com/Druidia-Bot/DotSwarm",
+    "defaultPrompt": [
+      "Plan this task, then run it with the swarm and review the result.",
+      "Check that DotSwarm is set up and ready.",
+      "Resume the detached swarm and finish the remaining work."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

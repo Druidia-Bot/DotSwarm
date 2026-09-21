@@ -482,7 +482,7 @@ export class SwarmManager {
   normalizeSpec(input) {
     const objective = String(input.objective ?? '').trim();
     if (!objective) throw new Error('objective is required');
-    const workspace = path.resolve(input.workspace || process.env.DEEPASTRA_WORKSPACE || process.cwd());
+    const workspace = path.resolve(input.workspace || process.env.DOTSWARM_WORKSPACE || process.cwd());
     if (!fs.existsSync(workspace) || !fs.statSync(workspace).isDirectory()) throw new Error(`workspace does not exist: ${workspace}`);
     const maxAgents = Math.max(1, Math.min(Number(input.max_agents ?? DEFAULTS.maxAgents) || DEFAULTS.maxAgents, DEFAULTS.maxAgentsCap));
     // Isolation is the default wherever it is possible: a git repo gets its own worktree.

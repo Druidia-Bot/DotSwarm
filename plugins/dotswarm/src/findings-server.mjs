@@ -3,10 +3,9 @@
 // member can record and read shared findings. The ledger file comes from
 // SWARM_FINDINGS_FILE. Tools appear to the models as mcp__findings__record_finding
 // and mcp__findings__list_findings.
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { VERSION } from './config.mjs';
 import { Findings, FINDING_TYPES } from './findings.mjs';
+import { serveStdio } from './mcp.mjs';
 
 const file = process.env.SWARM_FINDINGS_FILE;
 if (!file) {
@@ -47,24 +46,18 @@ const TOOLS = [
   },
 ];
 
-const server = new Server({ name: 'findings', version: '2.0.0' }, { capabilities: { tools: {} } });
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args = {} } = request.params;
-  try {
+serveStdio({
+  name: 'findings',
+  version: VERSION,
+  tools: TOOLS,
+  onClose: () => process.exit(0),
+  call(name, args) {
     if (name === 'record_finding') {
       const row = findings.append(args);
-      return { content: [{ type: 'text', text: JSON.stringify({ recorded: row.id }) }] };
+      return JSON.stringify({ recorded: row.id });
     }
-    if (name === 'list_findings') {
-      const rows = findings.list(args);
-      const empty = args.since ? `No findings newer than ${args.since}.` : 'No findings recorded yet.';
-      return { content: [{ type: 'text', text: rows.length ? Findings.render(rows) : empty }] };
-    }
-    return { isError: true, content: [{ type: 'text', text: `Unknown tool ${name}` }] };
-  } catch (error) {
-    return { isError: true, content: [{ type: 'text', text: error.message }] };
-  }
+    const rows = findings.list(args);
+    const empty = args.since ? `No findings newer than ${args.since}.` : 'No findings recorded yet.';
+    return rows.length ? Findings.render(rows) : empty;
+  },
 });
-
-await server.connect(new StdioServerTransport());

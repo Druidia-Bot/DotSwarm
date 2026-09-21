@@ -1,0 +1,14 @@
+{
+  "name": "dotswarm",
+  "version": "1.0.0",
+  "description": "Hand planned coding work to a DeepSeek Flash agent team that coordinates through a shared task board, mailbox, and findings ledger while your model supervises.",
+  "author": {
+    "name": "Druidia Bot",
+    "url": "https://github.com/Druidia-Bot"
+  },
+  "homepage": "https://github.com/Druidia-Bot/DotSwarm",
+  "repository": "https://github.com/Druidia-Bot/DotSwarm",
+  "license": "MIT",
+  "keywords": ["agents", "swarm", "deepseek", "multi-agent", "coding", "orchestration"],
+  "mcpServers": "./.mcp.json"
+}

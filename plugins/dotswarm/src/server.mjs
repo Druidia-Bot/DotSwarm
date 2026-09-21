@@ -1,10 +1,9 @@
 #!/usr/bin/env node
-// The MCP server the coordinator (Codex) talks to. Six small tools; everything below them
-// is the DeepSeek Harness Agent Teams runtime.
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { DEFAULTS, deepseekKeySource, dshInstalled } from './config.mjs';
+// The MCP server the coordinator (the model running the Codex session) talks to.
+// A small set of tools; everything below them is the DeepSeek Harness Agent Teams runtime.
+import { DEFAULTS, VERSION, deepseekKeySource, dshInstalled, keyFile } from './config.mjs';
+import { serveStdio } from './mcp.mjs';
+import { runDoctor, runSetup } from './setup.mjs';
 import { SwarmManager } from './swarm.mjs';
 
 const manager = new SwarmManager();
@@ -133,7 +132,25 @@ const TOOLS = [
     description: 'List swarms known to this server, including detached ones left by earlier server processes (resumable with swarm_resume).',
     inputSchema: { type: 'object', additionalProperties: false, properties: {} },
   },
+  {
+    name: 'swarm_doctor',
+    description: 'Check that DotSwarm can run: Node, pnpm, the pinned DeepSeek Harness, the swarm profile, and the DeepSeek API key. Returns the data directory and the key file path to tell the user about.',
+    inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+  },
+  {
+    name: 'swarm_setup',
+    description: 'One-time setup: installs the pinned DeepSeek Harness and the Agent Teams bundle into the DotSwarm data directory and verifies the profile. Takes a few minutes and needs npm and pnpm on PATH. Safe to rerun. The DeepSeek API key is not handled here; the result names the file the user must put it in.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: { reinstall: { type: 'boolean', description: 'Reinstall even when already present.' } },
+    },
+  },
 ];
+
+function setupHint(reason) {
+  return `${reason} Call swarm_setup to install the runtime, then ask the user to put DEEPSEEK_API_KEY=... in ${keyFile()}. swarm_doctor reports the state.`;
+}
 
 async function waitUntilIdle(swarm, waitMs) {
   const deadline = Date.now() + waitMs;
@@ -145,10 +162,10 @@ async function waitUntilIdle(swarm, waitMs) {
 async function call(name, args) {
   switch (name) {
     case 'swarm_start': {
-      if (!dshInstalled()) throw new Error('DeepSeek Harness is not installed. From the DeepAstra directory run: npm run setup');
-      if (!deepseekKeySource()) throw new Error('No DEEPSEEK_API_KEY found in the environment or in work/dsh-home/.env. Add it, then retry.');
+      if (!dshInstalled()) throw new Error(setupHint('DeepSeek Harness is not installed.'));
+      if (!deepseekKeySource()) throw new Error(`No DEEPSEEK_API_KEY found in the environment or in ${keyFile()}. Ask the user to add it, then retry.`);
       const swarm = await manager.start(args);
-      return { swarmId: swarm.id, phase: swarm.phase, workspace: swarm.workspace, branch: swarm.branch, hint: 'Call swarm_status with wait_ms while the team works; swarm_result when phase is idle.' };
+      return { swarmId: swarm.id, phase: swarm.phase, workspace: swarm.workspace, branch: swarm.branch, mode: swarm.spec.mode, design: swarm.spec.design, model: swarm.spec.model, hint: 'Call swarm_status with wait_ms while the team works; swarm_result when phase is idle.' };
     }
     case 'swarm_status': {
       const swarm = manager.get(args.swarm_id);
@@ -171,28 +188,20 @@ async function call(name, args) {
     case 'swarm_stop':
       return manager.get(args.swarm_id).stop();
     case 'swarm_resume': {
-      if (!dshInstalled()) throw new Error('DeepSeek Harness is not installed. From the DeepAstra directory run: npm run setup');
+      if (!dshInstalled()) throw new Error(setupHint('DeepSeek Harness is not installed.'));
       const swarm = await manager.resume(args.swarm_id, { instruction: args.instruction, maxAgents: args.max_agents, mode: args.mode, design: args.design });
       return { swarmId: swarm.id, resumedFrom: args.swarm_id, phase: swarm.phase, workspace: swarm.workspace, branch: swarm.branch };
     }
     case 'swarm_list':
       return manager.list();
+    case 'swarm_doctor':
+      return runDoctor();
+    case 'swarm_setup':
+      return runSetup({ reinstall: Boolean(args.reinstall) });
     default:
       throw new Error(`unknown tool ${name}`);
   }
 }
-
-const server = new Server({ name: 'deepastra-swarm', version: '2.0.0' }, { capabilities: { tools: {} } });
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args = {} } = request.params;
-  try {
-    const result = await call(name, args);
-    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-  } catch (error) {
-    return { isError: true, content: [{ type: 'text', text: error.message }] };
-  }
-});
 
 let shuttingDown = false;
 async function shutdown() {
@@ -203,6 +212,12 @@ async function shutdown() {
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
-process.stdin.on('close', shutdown);
 
-await server.connect(new StdioServerTransport());
+serveStdio({
+  name: 'dotswarm',
+  version: VERSION,
+  tools: TOOLS,
+  call,
+  onClose: shutdown,
+  instructions: 'DotSwarm runs DeepSeek Flash agent teams. Plan first, then swarm_start; supervise with swarm_status (use wait_ms and since_finding); steer only on exceptions; verify swarm_result yourself. If a tool says setup is needed, call swarm_setup, then swarm_doctor.',
+});

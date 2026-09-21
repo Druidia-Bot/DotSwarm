@@ -56,4 +56,4 @@ Do not skip the audit because the tests are green. Green tests written by the sa
 
 ## Setup and failures
 
-A start error naming setup means: from the DeepAstra directory run `npm run setup`, add `DEEPSEEK_API_KEY` to `work/dsh-home/.env`, and run `npm run doctor`. Do not paste keys into tool calls. A `failed` phase includes the runtime's stderr tail in `error`.
+When a tool says setup is needed, or the user asks whether DotSwarm is ready, call `swarm_doctor`. If the runtime is missing, call `swarm_setup`; it installs the pinned DeepSeek Harness into the user's DotSwarm data directory and takes a few minutes. If the key is missing, tell the user the exact key file path from the doctor result and ask them to put `DEEPSEEK_API_KEY=...` in it themselves. Never ask for the key in chat and never write it anywhere. A `failed` phase includes the runtime's stderr tail in `error`.
