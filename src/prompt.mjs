@@ -57,8 +57,31 @@ ${board}
 ${resume.lastLeadMessage ? `PREVIOUS LEAD'S LAST MESSAGE\n${resume.lastLeadMessage}\n\n` : ''}${resume.instruction ? `ASTRA'S INSTRUCTION FOR THE RESUME\n${resume.instruction}\n\n` : ''}Re-create only the remaining work as tasks, verify what the previous team claimed as complete, then continue to the FINAL REPORT.`;
 }
 
+/** Screenshot-driven iteration protocol for swarms that touch anything a person sees. */
+export function buildDesignSection({ screensDir }) {
+  return `UX AND DESIGN ITERATION
+This swarm's model can see images. Anything a person will look at is not done until it has been rendered, viewed, critiqued, and improved in a real browser.
+- Assign one teammate the designer role for all user-facing screens and components. The reviewer views the final screenshots independently.
+- Run the application locally (dev server or built preview). Render each screen with Playwright at 390x844 and 1440x900. If the project has no Playwright, add it as a devDependency and install chromium; never commit browser binaries or screenshots into the repository.
+- Save screenshots outside the repository under ${screensDir} as <screen>-<viewport>-v<round>.png, then view each one with read_image. Do not judge a screen from its DOM or its code.
+- Critique every screenshot against the objective's visual direction and these checks: visual hierarchy, spacing rhythm, typography scale and readability, colour contrast, alignment, overflow or clipping, empty, loading, and error states, focus visibility, touch-target size, and how it looks with content of realistic length. Record each critique as a finding of type discovery with scope ui/<screen>.
+- Iterate: fix, re-render, view again. At least two rounds per screen; stop when a round produces no material improvement. Keep the best version, not the last one.
+- In the FINAL REPORT Verification section, list every screen with its final screenshot path, the number of rounds, and what changed between the first and final round.`;
+}
+
+/** Rules for a swarm whose job is to act on Astra's audit, not to build. */
+export function buildRefactorSection() {
+  return `REFACTOR MODE
+This swarm exists to resolve the audit items Astra listed in the instruction or context packet. It does not add features.
+- Run the complete test suite and type check first and record the baseline as a finding of type result. Every task must leave them green.
+- Preserve behaviour unless an audit item explicitly asks for a change; a task that must change behaviour records a finding of type decision before editing.
+- One audit item, or one coherent group of items, per task, with disjoint write scopes. Prefer deleting and simplifying over adding.
+- Every resolved item gets a finding of type result naming the audit id and the files touched. An item that cannot be resolved safely gets a finding of type question naming the id and the reason.
+- The FINAL REPORT Changes section maps each audit id to what was done, and the Unresolved section lists every id not resolved.`;
+}
+
 export function buildLeadPrompt(spec) {
-  const roles = spec.roles?.length ? spec.roles : suggestedRoles(spec.maxAgents);
+  const roles = spec.roles?.length ? spec.roles : suggestedRoles(spec.maxAgents, { design: Boolean(spec.design) });
   const criteria = spec.acceptanceCriteria?.length
     ? bullet(spec.acceptanceCriteria)
     : '- The objective is met and every change is verified by running the relevant tests or commands.';
@@ -76,7 +99,7 @@ ${spec.objective.trim()}
 ${spec.plan ? `PLAN FROM ASTRA\n${spec.plan.trim()}\n\n` : ''}ACCEPTANCE CRITERIA
 ${criteria}
 
-${spec.context ? `CONTEXT PACKET\n${spec.context.trim()}\n\n` : ''}${spec.resume ? `${buildResumeSection(spec.resume)}\n\n` : ''}SUGGESTED TEAMMATE ROLES
+${spec.context ? `CONTEXT PACKET\n${spec.context.trim()}\n\n` : ''}${spec.resume ? `${buildResumeSection(spec.resume)}\n\n` : ''}${spec.mode === 'refactor' ? `${buildRefactorSection()}\n\n` : ''}${spec.design ? `${buildDesignSection({ screensDir: spec.screensDir ?? 'the swarm directory' })}\n\n` : ''}SUGGESTED TEAMMATE ROLES
 ${bullet(roles)}
 Adjust the roster to the work; fewer teammates is better when the work is small.
 
@@ -109,10 +132,11 @@ export function buildSteerPrompt(instruction, findingId) {
   return `[Astra steer]${findingId ? ` (${findingId})` : ''}\n${instruction.trim()}\n\nApply this now. If it changes the task plan, update the task board and tell affected teammates. Continue until the FINAL REPORT is complete.`;
 }
 
-export function suggestedRoles(maxAgents) {
+export function suggestedRoles(maxAgents, { design = false } = {}) {
   const all = [
     'explorer: map the relevant code, record findings, no edits',
     'implementer: make the code changes for assigned tasks',
+    ...(design ? ['designer: render, screenshot, critique, and iterate every user-facing screen'] : []),
     'tester: write and run tests against the acceptance criteria',
     'reviewer: adversarially review the diff and record failures',
     'implementer-2: a second implementer for a disjoint write scope',

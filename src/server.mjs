@@ -27,7 +27,9 @@ const TOOLS = [
         roles: { type: 'array', items: { type: 'string' }, description: 'Optional role hints such as "explorer: ..." or "tester: ...".' },
         isolate: { type: 'boolean', description: 'Run in a fresh git worktree on branch swarm/<id> so the main checkout stays untouched. Default: true whenever the workspace is a git repository. Pass false to work directly in the checkout.' },
         permission_mode: { type: 'string', enum: DEFAULTS.permissionModes, description: `Runtime sandbox for the team (default ${DEFAULTS.permissionMode}). workspace-write confines writes to the workspace but on Windows it also blocks spawning native toolchain binaries such as esbuild and workerd, so npm install, vitest, Astro, and wrangler fail. Use danger-full-access for real build work and rely on the objective's boundaries; use read-only for exploration-only swarms.` },
-        model: { type: 'string', description: `Model for every team member (default ${DEFAULTS.model}).` },
+        design: { type: 'boolean', description: `Set true whenever the work includes anything a person will look at. Switches the team to the image-capable ${DEFAULTS.visionModel} and requires screenshot-driven iteration on every screen (render with Playwright at mobile and desktop sizes, view with read_image, critique, improve, at least two rounds).` },
+        mode: { type: 'string', enum: DEFAULTS.modes, description: 'build (default) or refactor. Refactor swarms resolve an audit list you supply in context or instruction: no new features, behaviour preserved, suite green before and after, one audit id per task, every id accounted for in the report.' },
+        model: { type: 'string', description: `Model for every team member (default ${DEFAULTS.model}; design swarms default to ${DEFAULTS.visionModel}).` },
         reasoning_effort: { type: 'string', enum: ['off', 'low', 'high', 'max'], description: 'DeepSeek reasoning effort for the team.' },
         max_tokens: { type: 'integer', minimum: 1024, description: 'Per-response output token cap for team members.' },
       },
@@ -119,8 +121,10 @@ const TOOLS = [
       required: ['swarm_id'],
       properties: {
         swarm_id: { type: 'string', description: 'The detached or finished swarm to continue.' },
-        instruction: { type: 'string', description: 'What to focus on now: remaining work, what to re-verify, what changed.' },
+        instruction: { type: 'string', description: 'What to focus on now: remaining work, what to re-verify, what changed. For mode refactor, the complete numbered audit list.' },
         max_agents: { type: 'integer', minimum: 1, maximum: DEFAULTS.maxAgentsCap },
+        mode: { type: 'string', enum: DEFAULTS.modes, description: 'Override the mode for the continuation; use refactor to act on your audit.' },
+        design: { type: 'boolean', description: 'Override the design flag for the continuation.' },
       },
     },
   },
@@ -168,7 +172,7 @@ async function call(name, args) {
       return manager.get(args.swarm_id).stop();
     case 'swarm_resume': {
       if (!dshInstalled()) throw new Error('DeepSeek Harness is not installed. From the DeepAstra directory run: npm run setup');
-      const swarm = await manager.resume(args.swarm_id, { instruction: args.instruction, maxAgents: args.max_agents });
+      const swarm = await manager.resume(args.swarm_id, { instruction: args.instruction, maxAgents: args.max_agents, mode: args.mode, design: args.design });
       return { swarmId: swarm.id, resumedFrom: args.swarm_id, phase: swarm.phase, workspace: swarm.workspace, branch: swarm.branch };
     }
     case 'swarm_list':

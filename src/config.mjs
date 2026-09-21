@@ -11,6 +11,9 @@ export const TEAM_PROFILE_VERSION = '0.1.5-alpha.2';
 export const DEFAULTS = Object.freeze({
   provider: 'deepseek-official',
   model: 'deepseek-v4-flash',
+  // The only image-capable model the API currently lists; design swarms need read_image.
+  visionModel: 'deepseek-flash',
+  modes: ['build', 'refactor'],
   maxAgents: 3,
   maxAgentsCap: 7,
   // workspace-write blocks spawning native toolchain binaries on Windows (esbuild, workerd).

@@ -197,7 +197,9 @@ export class Swarm {
         reasoningEffort: this.spec.reasoningEffort,
         maxTokens: this.spec.maxTokens,
       });
-      const prompt = buildLeadPrompt({ ...this.spec, workspace: this.workspace, isolated: Boolean(this.branch) });
+      const screensDir = path.join(this.dir, 'screens');
+      if (this.spec.design) fs.mkdirSync(screensDir, { recursive: true });
+      const prompt = buildLeadPrompt({ ...this.spec, workspace: this.workspace, isolated: Boolean(this.branch), screensDir: toPosix(screensDir) });
       fs.writeFileSync(path.join(this.dir, 'lead-prompt.md'), prompt);
       await this.#prompt(prompt, 'objective');
       this.phase = 'running';
@@ -336,6 +338,8 @@ export class Swarm {
       phase: this.phase,
       ...(this.detached ? { detached: 'The server that ran this swarm is gone. Status is replayed from its log; use swarm_resume to continue the work.' } : {}),
       ...(this.spec.resume ? { resumedFrom: this.spec.resume.fromSwarmId } : {}),
+      mode: this.spec.mode ?? 'build',
+      ...(this.spec.design ? { design: true, model: this.spec.model, screens: toPosix(path.join(this.dir, 'screens')) } : {}),
       ...(this.error ? { error: this.error.slice(0, 1500) } : {}),
       elapsedSeconds: this.elapsedSeconds(),
       workspace: this.workspace,
@@ -483,8 +487,14 @@ export class SwarmManager {
     const maxAgents = Math.max(1, Math.min(Number(input.max_agents ?? DEFAULTS.maxAgents) || DEFAULTS.maxAgents, DEFAULTS.maxAgentsCap));
     // Isolation is the default wherever it is possible: a git repo gets its own worktree.
     const isolate = input.isolate === undefined ? isGitRepoSync(workspace) : Boolean(input.isolate);
+    const design = Boolean(input.design);
+    const mode = DEFAULTS.modes.includes(input.mode) ? input.mode : 'build';
+    // A design swarm must see its screenshots; the default model is text-only.
+    const model = input.model ? String(input.model) : (design ? DEFAULTS.visionModel : DEFAULTS.model);
     return {
       swarmId: newId(),
+      design,
+      mode,
       objective,
       plan: input.plan ? String(input.plan) : undefined,
       acceptanceCriteria: Array.isArray(input.acceptance_criteria) ? input.acceptance_criteria.map(String) : undefined,
@@ -495,7 +505,7 @@ export class SwarmManager {
       isolate,
       permissionMode: DEFAULTS.permissionModes.includes(input.permission_mode) ? input.permission_mode : DEFAULTS.permissionMode,
       provider: input.provider ? String(input.provider) : DEFAULTS.provider,
-      model: input.model ? String(input.model) : DEFAULTS.model,
+      model,
       reasoningEffort: input.reasoning_effort ? String(input.reasoning_effort) : undefined,
       maxTokens: input.max_tokens ? Number(input.max_tokens) : undefined,
     };
@@ -515,9 +525,10 @@ export class SwarmManager {
    * Lead starts from the old board, the full ledger, and the old Lead's last message,
    * on the same workspace or worktree.
    */
-  async resume(id, { instruction, maxAgents } = {}) {
+  async resume(id, { instruction, maxAgents, mode, design } = {}) {
     const previous = this.get(id);
     if (previous.alive) throw new Error(`swarm ${id} is still running; steer it instead of resuming`);
+    const nextDesign = design === undefined ? Boolean(previous.spec.design) : Boolean(design);
     const spec = {
       ...previous.spec,
       swarmId: newId(),
@@ -525,6 +536,9 @@ export class SwarmManager {
       workspace: previous.workspace,
       isolate: false,
       maxAgents: maxAgents ? Math.max(1, Math.min(Number(maxAgents), DEFAULTS.maxAgentsCap)) : previous.spec.maxAgents,
+      mode: DEFAULTS.modes.includes(mode) ? mode : (previous.spec.mode ?? 'build'),
+      design: nextDesign,
+      model: nextDesign && previous.spec.model === DEFAULTS.model ? DEFAULTS.visionModel : previous.spec.model,
       resume: { ...previous.resumePacket(instruction), findingsFile: previous.findings.file },
     };
     const swarm = new Swarm(spec, { launch: this.launch });

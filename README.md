@@ -59,7 +59,7 @@ Restart Codex. The `swarm` skill tells Astra when and how to use the tools.
 
 | Tool | Purpose |
 |---|---|
-| `swarm_start` | objective, plan (5 to 15 work units), acceptance criteria, context packet, absolute workspace, `max_agents`, optional `isolate` (git worktree on `swarm/<id>`), model and effort |
+| `swarm_start` | objective, plan (5 to 15 work units), acceptance criteria, context packet, absolute workspace, `max_agents`, `isolate`, `design` (vision model plus screenshot iteration on every screen), `mode` (`build` or `refactor`), model and effort |
 | `swarm_status` | compressed state; `wait_ms` blocks until something changes instead of polling; `since_finding` returns only new ledger entries; lists `openQuestions` the Lead raised for Astra, filtered tool errors, and a `cost` line |
 | `swarm_steer` | one instruction to the Lead, delivered as its next turn and immediately as a ledger entry of type `steer` |
 | `swarm_task_add` | hand the Lead a new board task instead of Astra editing the workspace itself |
@@ -68,6 +68,8 @@ Restart Codex. The `swarm` skill tells Astra when and how to use the tools.
 | `swarm_stop` | shut the runtime down; workspace changes stay |
 | `swarm_resume` | continue a detached or finished swarm in a fresh runtime on the same worktree, seeded with the old board, the whole ledger, and the old Lead's last report |
 | `swarm_list` | swarms known to this server, including detached ones left behind by earlier server processes |
+
+The skill makes a finished swarm the middle of the job: Astra verifies the report, audits every changed file for alignment, gotchas, organization, and design, resumes the swarm in `refactor` mode with the numbered audit list, and then does a final sweep in the workspace itself. Design swarms run on `deepseek-flash`, the only image-capable model the API lists, and must render each screen with Playwright at 390x844 and 1440x900, view it with `read_image`, critique it, and iterate at least twice; screenshots go under `work/swarms/<id>/screens`, never into the repository.
 
 Isolation is on by default: when the workspace is a git repository the team works in a worktree under `work/worktrees/<id>` on branch `swarm/<id>`, and `swarm_result` reports the branch for Astra to review and merge. Pass `isolate: false` to work directly in the checkout. Worktrees are kept until you remove them with `git worktree remove`.
 

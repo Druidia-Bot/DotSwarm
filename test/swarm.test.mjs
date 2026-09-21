@@ -139,8 +139,14 @@ test('isolation defaults to a worktree for git repos, and swarms persist, detach
   assert.equal(detached.inspect('member:worker').messages[0].text, 'worker done');
   await assert.rejects(detached.steer('x'), /detached/);
 
-  const resumed = await crashed.resume(first.id, { instruction: 'verify task-1 then finish' });
+  const resumed = await crashed.resume(first.id, { instruction: 'verify task-1 then finish', mode: 'refactor', design: true });
   assert.notEqual(resumed.id, first.id);
+  assert.equal(resumed.spec.mode, 'refactor');
+  assert.equal(resumed.spec.design, true);
+  assert.equal(resumed.spec.model, 'deepseek-flash', 'a design continuation of a default-model swarm switches to the vision model');
+  assert.ok(fs.existsSync(path.join(resumed.dir, 'screens')));
+  assert.equal(resumed.status().mode, 'refactor');
+  assert.equal(resumed.status().design, true);
   assert.equal(resumed.workspace, first.workspace, 'reuses the existing worktree');
   assert.equal(resumed.branch, first.branch);
   assert.equal(resumed.spec.isolate, false);
@@ -149,6 +155,8 @@ test('isolation defaults to a worktree for git repos, and swarms persist, detach
   assert.match(prompt, /task-1 \[completed, was worker\] Explore/);
   assert.match(prompt, /verify task-1 then finish/);
   assert.match(prompt, /PREVIOUS LEAD'S LAST MESSAGE/);
+  assert.match(prompt, /REFACTOR MODE/);
+  assert.match(prompt, /UX AND DESIGN ITERATION/);
   assert.equal(resumed.findings.readAll().length, first.findings.readAll().length, 'ledger carried over');
   assert.equal(crashed.list().find((s) => s.swarmId === resumed.id).resumedFrom, first.id);
   await assert.rejects(crashed.resume(resumed.id), /still running/);
@@ -165,4 +173,13 @@ test('spec validation', () => {
   assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), max_agents: 99 }).maxAgents, 7);
   assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), permission_mode: 'read-only' }).permissionMode, 'read-only');
   assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), permission_mode: 'bogus' }).permissionMode, 'danger-full-access');
+  const plain = manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir() });
+  assert.equal(plain.design, false);
+  assert.equal(plain.mode, 'build');
+  assert.equal(plain.model, 'deepseek-v4-flash');
+  const design = manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), design: true });
+  assert.equal(design.model, 'deepseek-flash', 'design swarms switch to the vision model');
+  assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), design: true, model: 'deepseek-v4-pro' }).model, 'deepseek-v4-pro');
+  assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), mode: 'refactor' }).mode, 'refactor');
+  assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), mode: 'nonsense' }).mode, 'build');
 });

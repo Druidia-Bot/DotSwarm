@@ -2,6 +2,24 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildLeadPrompt, buildResumeSection, buildSteerPrompt, parseReport, suggestedRoles } from '../src/prompt.mjs';
 
+test('design and refactor sections appear only when requested', () => {
+  const base = { swarmId: 'sw-1', objective: 'Do X', maxAgents: 3, workspace: 'C:/ws' };
+  const plain = buildLeadPrompt(base);
+  assert.ok(!/UX AND DESIGN ITERATION/.test(plain));
+  assert.ok(!/REFACTOR MODE/.test(plain));
+  assert.ok(!/designer:/.test(plain));
+  const design = buildLeadPrompt({ ...base, design: true, screensDir: 'C:/work/swarms/sw-1/screens' });
+  assert.match(design, /UX AND DESIGN ITERATION/);
+  assert.match(design, /390x844 and 1440x900/);
+  assert.match(design, /C:\/work\/swarms\/sw-1\/screens/);
+  assert.match(design, /read_image/);
+  assert.match(design, /designer: render, screenshot/);
+  const refactor = buildLeadPrompt({ ...base, mode: 'refactor' });
+  assert.match(refactor, /REFACTOR MODE/);
+  assert.match(refactor, /does not add features/);
+  assert.match(refactor, /naming the audit id/);
+});
+
 test('resume section lists the old board, ledger size, and instruction', () => {
   const text = buildResumeSection({
     fromSwarmId: 'sw-old', tasks: [{ id: 'task-2', subject: 'Tests', status: 'in_progress', owner: 'tester' }],
