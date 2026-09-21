@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The MCP server Astra (Codex) talks to. Six small tools; everything below them
+// The MCP server the coordinator (Codex) talks to. Six small tools; everything below them
 // is the DeepSeek Harness Agent Teams runtime.
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';

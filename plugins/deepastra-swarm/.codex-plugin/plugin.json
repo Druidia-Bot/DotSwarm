@@ -1,7 +1,7 @@
 {
   "name": "deepastra-swarm",
   "version": "2.0.0",
-  "description": "Astra plans and supervises; a DeepSeek Flash Agent Team does the work through the DeepSeek Harness.",
+  "description": "the coordinator plans and supervises; a DeepSeek Flash Agent Team does the work through the DeepSeek Harness.",
   "author": {
     "name": "Local developer"
   },
@@ -9,7 +9,7 @@
   "interface": {
     "displayName": "DeepAstra Swarm",
     "shortDescription": "Delegate planned work to a DeepSeek agent team.",
-    "longDescription": "DeepAstra Swarm lets Astra hand a planned task to a team of inexpensive DeepSeek Flash agents running in the DeepSeek Harness. The team coordinates through a shared task board, durable mailbox, and findings ledger; Astra receives compressed state, steers on exceptions, and reviews the final report.",
+    "longDescription": "DeepAstra Swarm lets the coordinator hand a planned task to a team of inexpensive DeepSeek Flash agents running in the DeepSeek Harness. The team coordinates through a shared task board, durable mailbox, and findings ledger; the coordinator receives compressed state, steers on exceptions, and reviews the final report.",
     "developerName": "Local developer",
     "category": "Productivity",
     "capabilities": [],

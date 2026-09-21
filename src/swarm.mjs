@@ -250,19 +250,19 @@ export class Swarm {
     if (!text) throw new Error('instruction is required');
     // The SDK protocol has no mid-turn steer: a prompt is claimed at the next turn. The
     // ledger entry reaches a Lead that is still mid-turn, because it reads findings each cycle.
-    const finding = this.findings.append({ author: 'astra', type: 'steer', scope: 'astra', message: text });
+    const finding = this.findings.append({ author: 'coordinator', type: 'steer', scope: 'coordinator', message: text });
     const messageId = await this.#prompt(buildSteerPrompt(text, finding.id), 'steer');
     this.phase = 'running';
     return { messageId, findingId: finding.id, note: 'Queued as the next Lead turn and recorded in the findings ledger as type steer, which the Lead checks each cycle.' };
   }
 
-  /** Hand the Lead a new board task instead of Astra doing the work itself. */
+  /** Hand the Lead a new board task instead of the coordinator doing the work itself. */
   async addTask({ subject, description, writeScopes = [], blockedBy = [] }) {
     const title = String(subject ?? '').trim();
     const body = String(description ?? '').trim();
     if (!title || !body) throw new Error('subject and description are required');
     const lines = [
-      'TASK REQUEST from Astra. Create this task on the shared board with team_task_create, assign or announce an owner, and complete it under the usual verification rules.',
+      'TASK REQUEST from the coordinator. Create this task on the shared board with team_task_create, assign or announce an owner, and complete it under the usual verification rules.',
       `Subject: ${title}`,
       `Description: ${body}`,
       ...(writeScopes.length ? [`Write scopes: ${writeScopes.join(', ')}`] : []),
@@ -272,10 +272,10 @@ export class Swarm {
     return { ...result, note: 'Task request queued as a steer and recorded in the ledger; the Lead creates the board task.' };
   }
 
-  /** Open items the Lead raised for Astra: questions, and anything scoped to astra. */
+  /** Open items the Lead raised for the coordinator: questions, and anything scoped to coordinator. */
   openQuestions(limit = 10) {
     return this.findings.readAll()
-      .filter((f) => f.type === 'question' || (f.scope === 'astra' && f.type !== 'steer'))
+      .filter((f) => f.type === 'question' || (f.scope === 'coordinator' && f.type !== 'steer'))
       .slice(-limit)
       .map((f) => ({ id: f.id, author: f.author, message: f.message.slice(0, 500) }));
   }
@@ -287,7 +287,7 @@ export class Swarm {
       swarmTokens: tokens,
       byMember: this.state.tokensByMember(),
       ...(prices ? { estimatedUsd: Number(((tokens.input * prices.input + tokens.output * prices.output) / 1_000_000).toFixed(4)) } : {}),
-      note: 'DeepSeek tokens only. Astra spends separately; keep Astra to planning, steering, and review.',
+      note: 'DeepSeek tokens only. The coordinator spends separately; keep the coordinator to planning, steering, and review.',
     };
   }
 

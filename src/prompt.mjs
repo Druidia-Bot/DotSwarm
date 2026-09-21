@@ -1,5 +1,5 @@
-// Prompt composition: what the Team Lead receives from Astra, and the standing
-// protocol every teammate must be given. Astra manages state, not conversation,
+// Prompt composition: what the Team Lead receives from the coordinator, and the standing
+// protocol every teammate must be given. The coordinator manages state, not conversation,
 // so the Lead is told exactly how to report so swarm_result stays compact.
 
 export const REPORT_HEADINGS = ['Summary', 'Changes', 'Verification', 'Unresolved', 'Handoff'];
@@ -54,7 +54,7 @@ A previous team worked on this objective in this same workspace and was interrup
 PREVIOUS TASK BOARD (final state)
 ${board}
 
-${resume.lastLeadMessage ? `PREVIOUS LEAD'S LAST MESSAGE\n${resume.lastLeadMessage}\n\n` : ''}${resume.instruction ? `ASTRA'S INSTRUCTION FOR THE RESUME\n${resume.instruction}\n\n` : ''}Re-create only the remaining work as tasks, verify what the previous team claimed as complete, then continue to the FINAL REPORT.`;
+${resume.lastLeadMessage ? `PREVIOUS LEAD'S LAST MESSAGE\n${resume.lastLeadMessage}\n\n` : ''}${resume.instruction ? `THE COORDINATOR'S INSTRUCTION FOR THE RESUME\n${resume.instruction}\n\n` : ''}Re-create only the remaining work as tasks, verify what the previous team claimed as complete, then continue to the FINAL REPORT.`;
 }
 
 /** Screenshot-driven iteration protocol for swarms that touch anything a person sees. */
@@ -69,10 +69,10 @@ This swarm's model can see images. Anything a person will look at is not done un
 - In the FINAL REPORT Verification section, list every screen with its final screenshot path, the number of rounds, and what changed between the first and final round.`;
 }
 
-/** Rules for a swarm whose job is to act on Astra's audit, not to build. */
+/** Rules for a swarm whose job is to act on the coordinator's audit, not to build. */
 export function buildRefactorSection() {
   return `REFACTOR MODE
-This swarm exists to resolve the audit items Astra listed in the instruction or context packet. It does not add features.
+This swarm exists to resolve the audit items the coordinator listed in the instruction or context packet. It does not add features.
 - Run the complete test suite and type check first and record the baseline as a finding of type result. Every task must leave them green.
 - Preserve behaviour unless an audit item explicitly asks for a change; a task that must change behaviour records a finding of type decision before editing.
 - One audit item, or one coherent group of items, per task, with disjoint write scopes. Prefer deleting and simplifying over adding.
@@ -85,18 +85,18 @@ export function buildLeadPrompt(spec) {
   const criteria = spec.acceptanceCriteria?.length
     ? bullet(spec.acceptanceCriteria)
     : '- The objective is met and every change is verified by running the relevant tests or commands.';
-  return `You are the Team Lead of swarm ${spec.swarmId}. Astra, the supervising architect, planned this work and will review the outcome. Astra is not in this conversation; messages framed as [Astra steer] are its instructions and take priority.
+  return `You are the Team Lead of swarm ${spec.swarmId}. The coordinator, the supervising architect, planned this work and will review the outcome. The coordinator is not in this conversation; messages framed as [Coordinator steer] are its instructions and take priority.
 
 Use Agent Teams for this work. Create up to ${spec.maxAgents} teammates with spawn_teammate (fresh context) and coordinate them through the shared task board and mailbox. Do the planning, arbitration, and final review yourself; delegate exploration, implementation, testing, and review to teammates so they run in parallel.
 
 WORKSPACE
-${spec.workspace}${spec.isolated ? ' (an isolated git worktree on its own branch; commit nothing, Astra reconciles the diff)' : ''}
+${spec.workspace}${spec.isolated ? ' (an isolated git worktree on its own branch; commit nothing, the coordinator reconciles the diff)' : ''}
 All members share this checkout. Split write work into disjoint write scopes, record them on tasks, and order dependent work with task dependencies. Write scopes are advisory, not locks.
 
 OBJECTIVE
 ${spec.objective.trim()}
 
-${spec.plan ? `PLAN FROM ASTRA\n${spec.plan.trim()}\n\n` : ''}ACCEPTANCE CRITERIA
+${spec.plan ? `PLAN FROM THE COORDINATOR\n${spec.plan.trim()}\n\n` : ''}ACCEPTANCE CRITERIA
 ${criteria}
 
 ${spec.context ? `CONTEXT PACKET\n${spec.context.trim()}\n\n` : ''}${spec.resume ? `${buildResumeSection(spec.resume)}\n\n` : ''}${spec.mode === 'refactor' ? `${buildRefactorSection()}\n\n` : ''}${spec.design ? `${buildDesignSection({ screensDir: spec.screensDir ?? 'the swarm directory' })}\n\n` : ''}SUGGESTED TEAMMATE ROLES
@@ -107,9 +107,9 @@ HOW TO RUN THE SWARM
 1. Inspect the workspace briefly, then create the shared tasks with team_task_create: one per meaningful work unit, each with a complete description, acceptance criteria, write scopes, and blocked_by dependencies. Record the task plan as a finding of type decision with author lead.
 2. Spawn teammates. Each spawn prompt must contain: the objective in one paragraph, the task ids they own, the acceptance criteria for those tasks, the exact verification commands, and the TEAM PROTOCOL below verbatim.
 3. Monitor with list_agents, team_task_list, mcp__findings__list_findings, and wait_agent. After each wakeup ask: what do we know, what conflicts, what is unverified, is another teammate actually useful? Redirect with send_message. Reassign or reopen tasks that stall.
-   Astra's instructions arrive two ways: as a [Astra steer] message at your next turn, and immediately as a finding of type steer with author astra. After every wait_agent and before completing any task, call mcp__findings__list_findings with since set to the last finding id you have seen, so you read only new entries; apply new steers at once. A steer beginning "TASK REQUEST" becomes a task on the board with team_task_create. Each steer id counts once; do not re-apply one you already handled.
-   Anything you need from Astra (a decision, a file you must not edit, missing configuration, an approval) is a finding of type question with scope astra. Astra sees those directly; do not bury them in messages. When Astra answers, record the outcome as a finding of type result that names the question id.
-   If a build tool, test runner, or package install fails with EPERM, spawn errors, or a sandbox escalation message, do not reverse-engineer the tool. Record a finding of type failure with the exact error and stop that workstream; Astra restarts the swarm with a different permission mode.
+   The coordinator's instructions arrive two ways: as a [Coordinator steer] message at your next turn, and immediately as a finding of type steer with author coordinator. After every wait_agent and before completing any task, call mcp__findings__list_findings with since set to the last finding id you have seen, so you read only new entries; apply new steers at once. A steer beginning "TASK REQUEST" becomes a task on the board with team_task_create. Each steer id counts once; do not re-apply one you already handled.
+   Anything you need from the coordinator (a decision, a file you must not edit, missing configuration, an approval) is a finding of type question with scope coordinator. The coordinator sees those directly; do not bury them in messages. When the coordinator answers, record the outcome as a finding of type result that names the question id.
+   If a build tool, test runner, or package install fails with EPERM, spawn errors, or a sandbox escalation message, do not reverse-engineer the tool. Record a finding of type failure with the exact error and stop that workstream; the coordinator restarts the swarm with a different permission mode.
 4. When all tasks are complete, review the complete diff yourself, run the acceptance verification, and fix or delegate anything that fails.
 5. Finish with the FINAL REPORT format below and nothing after it. Do not stop while a required teammate is still running.
 
@@ -125,11 +125,11 @@ Each command run and its actual result. Say plainly when something was not verif
 ## Unresolved
 Open problems, risks, and findings of type warning or failure that remain. Write "None" when empty.
 ## Handoff
-What Astra should review or decide next.`;
+What the coordinator should review or decide next.`;
 }
 
 export function buildSteerPrompt(instruction, findingId) {
-  return `[Astra steer]${findingId ? ` (${findingId})` : ''}\n${instruction.trim()}\n\nApply this now. If it changes the task plan, update the task board and tell affected teammates. Continue until the FINAL REPORT is complete.`;
+  return `[Coordinator steer]${findingId ? ` (${findingId})` : ''}\n${instruction.trim()}\n\nApply this now. If it changes the task plan, update the task board and tell affected teammates. Continue until the FINAL REPORT is complete.`;
 }
 
 export function suggestedRoles(maxAgents, { design = false } = {}) {

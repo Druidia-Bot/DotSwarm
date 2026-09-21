@@ -45,7 +45,7 @@ test('start, observe, steer, result, stop against the fake runtime', async (t) =
   assert.equal(status.cost.byMember.worker.input, 100);
   assert.equal(status.cost.estimatedUsd, undefined);
   assert.deepEqual(status.openQuestions, []);
-  swarm.findings.append({ author: 'lead', type: 'question', scope: 'astra', message: 'may I edit wrangler.jsonc?' });
+  swarm.findings.append({ author: 'lead', type: 'question', scope: 'coordinator', message: 'may I edit wrangler.jsonc?' });
   assert.equal(swarm.status().openQuestions[0].message, 'may I edit wrangler.jsonc?');
   assert.equal(swarm.status({ sinceFinding: 'F-001' }).findings.new.length, 0);
   assert.equal(swarm.status({ sinceFinding: 'F-000' }).findings.new.length, 1);
@@ -89,7 +89,7 @@ test('a runtime that dies during start reports failed with stderr', async () => 
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'deepastra-ws-'));
   const manager = new SwarmManager({ launch: fakeLaunch('exit-early') });
   await assert.rejects(manager.start({ objective: 'x', workspace }), /boot failure/);
-  assert.equal(manager.list().at(-1).phase, 'failed');
+  assert.equal(manager.list().find((s) => s.workspace === workspace).phase, 'failed');
 });
 
 function tempGitRepo() {

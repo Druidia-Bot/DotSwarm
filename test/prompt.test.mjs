@@ -45,11 +45,12 @@ test('lead prompt explicitly requests Agent Teams and carries the protocol and r
   assert.match(text, /isolated git worktree/);
   assert.match(text, /do not touch db/);
   assert.match(text, /- tests pass/);
-  assert.ok(!/\[Astra steer\]\n/.test(text));
+  assert.ok(!/\[Coordinator steer\]\n/.test(text));
+  assert.ok(!/\bAstra\b/.test(text), 'the coordinator is not named');
 });
 
 test('steer prompt is framed and report parsing splits headings', () => {
-  assert.match(buildSteerPrompt('stop editing db'), /^\[Astra steer\]\nstop editing db/);
+  assert.match(buildSteerPrompt('stop editing db'), /^\[Coordinator steer\]\nstop editing db/);
   const report = parseReport('preamble\n## Summary\nok\n## Changes\n- a\n## Verification\nran\n## Unresolved\nNone\n## Handoff\nreview');
   assert.deepEqual(report, { summary: 'ok', changes: '- a', verification: 'ran', unresolved: 'None', handoff: 'review' });
   assert.equal(parseReport('no headings'), null);

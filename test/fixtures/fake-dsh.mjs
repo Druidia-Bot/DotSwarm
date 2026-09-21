@@ -37,7 +37,7 @@ function runTurn(sessionId, messageId, text) {
     event(sessionId, 'team/task', { version: 2, teamId: sessionId, task: { id: 'task-1', revision: 3, subject: 'Explore', description: 'look', status: 'completed', ownerId: teammate, blockedBy: [], writeScopes: [] } });
     notify('subagent.finished', { provider: 'spawn', agentId: teammate, parentSessionId: sessionId, childSessionId: teammate, status: 'ok', stopReason: 'completed', lastAssistantMessage: [{ type: 'text', text: 'worker done' }] });
   }
-  const reply = text.startsWith('[Astra steer]')
+  const reply = text.startsWith('[Coordinator steer]')
     ? 'Steer applied.\n## Summary\nSteered and done.\n## Changes\n- none\n## Verification\n- none\n## Unresolved\nNone\n## Handoff\nReview.'
     : '## Summary\nAll done.\n## Changes\n- hello.txt: created\n## Verification\n- ls: ok\n## Unresolved\nNone\n## Handoff\nNothing.';
   event(sessionId, 'assistant/message', { turn: promptCount, step: 3, message: { content: [{ type: 'text', text: reply }] }, stream: [], usage: { inputTokens: 500, outputTokens: 80 } });
