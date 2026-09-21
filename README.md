@@ -44,11 +44,11 @@ DEEPSEEK_API_KEY=...
 | Tool | Purpose |
 |---|---|
 | `swarm_start` | objective, plan (5 to 15 work units), acceptance criteria, context packet, absolute workspace, `max_agents`, `isolate`, `design`, `mode`, model and effort |
-| `swarm_status` | compressed state; `wait_ms` blocks until something changes; `since_finding` returns only new ledger entries; lists open questions, filtered tool errors, and a cost line |
+| `swarm_status` | compressed state; `wait_ms` blocks until the swarm needs you (plan, question, failure, warning or tool-error burst, idle/stopped/failed) and `wake` names the reason; `wake_on: "any"` wakes on every change; `since_finding` returns only new ledger entries; lists open questions, filtered tool errors, and a cost line |
 | `swarm_steer` | one instruction to the Lead, delivered as its next turn and immediately as a ledger entry |
 | `swarm_task_add` | hand the Lead a new board task instead of editing the workspace yourself |
 | `swarm_inspect` | drill into `tasks`, `findings`, `roster`, `mail`, `errors`, `lead`, `member:<name>`, `events`, `prompts` |
-| `swarm_result` | the Lead's report split into Summary, Changes, Verification, Unresolved, Handoff, plus open warnings and `git diff --stat` |
+| `swarm_result` | the Lead's report split into Summary, Changes, Verification, Unresolved, Handoff; `ledger.open` (warnings and failures nobody answered); `readFirst` (changed gates, scripts, config, schema, forms, auth); `git diff --stat`; and writes `handoff.md` so the next stage can start in a fresh session |
 | `swarm_stop` | shut the runtime down; workspace changes stay |
 | `swarm_resume` | continue a detached or finished swarm on the same worktree, seeded with the old board, the whole ledger, and the last report |
 | `swarm_list` | swarms known to this server, including detached ones |

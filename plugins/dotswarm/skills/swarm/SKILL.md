@@ -18,7 +18,7 @@ Swarm when the task needs several files touched, tests run, and iteration, and w
 1. Understand the request. Read only what you need to plan: repo layout, entry points, the test command.
 2. Write the plan as 5 to 15 meaningful work units with dependencies and the files each touches. Do not write micro-steps; the team breaks work down itself. Include every file the team may need to touch, including root configs and docs; do not reserve files for yourself.
 3. Write acceptance criteria that are checkable, including exact commands.
-4. Write a short context packet: decisions already made, constraints, files not to touch. Never paste the conversation, credentials, or unrelated private context.
+4. Write a short context packet: decisions already made, facts the user has confirmed, constraints, sources the team may cite, validators to reuse rather than rebuild, and files not to touch. Everything you already know goes in now: each fact you hold back becomes a steer mid-run, and late facts cause rework. Never paste the conversation, credentials, or unrelated private context.
 
 Call `swarm_start` with `objective`, `plan`, `acceptance_criteria`, `context`, the absolute `workspace`, and `max_agents`. Ask for a reviewer or verifier role in `roles`; an adversarial reviewer finds defects before completion. Set `design: true` whenever the work includes anything a person will look at: the team then runs on the image-capable model and must render, screenshot, view, critique, and improve every screen at mobile and desktop sizes for at least two rounds. Include the visual direction and any design skill path in `context`. In a git repository the team works in its own worktree on branch `swarm/<id>` by default; you review and merge that branch afterwards. Pass `isolate: false` only when the user wants edits directly in the checkout. The default `permission_mode` is `danger-full-access` because the workspace sandbox breaks native toolchains on Windows; use `read-only` for exploration swarms.
 
@@ -28,22 +28,22 @@ After a Codex restart, `swarm_list` shows earlier swarms with phase `detached`. 
 
 ## While it runs
 
-Call `swarm_status` with `wait_ms` of 120000 to 300000 and `since_finding` set to the `latestId` from your previous call. Each result is a compressed state. Read `openQuestions` first: those are items the Lead needs from you. Then ask: what conflicts, what is unverified, is the team stuck? Act only on exceptions:
+Call `swarm_status` with `wait_ms` of 300000 to 600000 and `since_finding` set to the `latestId` from your previous call. The call blocks until the swarm needs you, and `wake` says why: `plan`, `question`, `failure`, `warnings`, `tool-errors`, `idle`, `stopped`, `failed`, `detached`, or `timeout`. Routine progress is held back and counted in `findings.newByType`, so every call is worth reading and you should not poll. Each result is a compressed state. Read `openQuestions` first: those are items the Lead needs from you. On `plan`, check the plan against the spec before the team builds on it; that is the cheapest point to correct drift. Then ask: what conflicts, what is unverified, is the team stuck? Act only on exceptions:
 
 - An open question: answer with one `swarm_steer`.
 - A finding of type failure or warning that changes the plan: `swarm_steer` with the decision.
 - Work you noticed is missing: `swarm_task_add`, not your own edit.
-- Tasks not moving for two waits: inspect `member:<name>` or `errors`, then steer or stop.
+- Tasks not moving across two `timeout` wakes: inspect `member:<name>` or `errors`, then steer or stop.
 - Runaway cost or the wrong direction: `swarm_stop`.
 
-Keep steers rare. One steer per decision, never a running commentary. Do not read member transcripts by default; `swarm_inspect` costs your context.
+Keep steers rare. One steer per decision, never a running commentary. Do not read member transcripts, the findings file, or the team's planning notes yourself; `swarm_status` already carries what you need and every file you open costs your context on every later turn. If something needs checking, `swarm_task_add` it and let the team read.
 
 ## When it finishes: verify, audit, refactor, sweep
 
 A swarm reporting done is the middle of the job, not the end. Do these four steps in order.
 
-1. **Verify.** When `phase` is `idle` and `reportReady` is true, call `swarm_result`. The report is a set of claims. Run the acceptance commands yourself, read the diff stat and the Verification section, and note every open question and warning. For a design swarm, view the final screenshots under `screens` yourself.
-2. **Audit.** Read the implementation fully: every changed file, not a sample. Judge it on four axes and write a numbered audit list with ids A-1, A-2, and so on, each naming files and the concrete problem:
+1. **Verify.** When `phase` is `idle` and `reportReady` is true, call `swarm_result`. The report is a set of claims. Start from its digest: `ledger.open` is every warning and failure nobody answered, `openQuestions` is what the Lead needs from you, and `readFirst` lists the changed files where defects are costly (gates, scripts, build config, schema, forms, auth). Run the acceptance commands yourself. For a design swarm, view the final screenshots of the key screens at both sizes; open the rest only when one looks wrong.
+2. **Audit.** Read every file in `readFirst` fully, every item in `ledger.open`, and a sample of the other changed files chosen for risk, not the whole diff. The team's reviewer already applied the review standard to everything; your audit is the judgment it cannot supply. Also run each gate or validator against one deliberately bad input and confirm it fails. Judge on four axes and write a numbered audit list with ids A-1, A-2, and so on, each naming files and the concrete problem:
    - Alignment: does it do what the objective and doctrine asked, no more and no less? Silent scope changes, invented requirements, disabled or weakened tests.
    - Gotchas: race conditions, error paths that swallow failures, unverified assumptions recorded as findings, hard-coded paths or secrets, platform-specific behaviour, TODOs left behind.
    - Organization: duplicated abstractions across teammates' scopes, inconsistent naming, modules split along team ownership instead of the domain, dead code, missing or misplaced tests.
@@ -51,6 +51,10 @@ A swarm reporting done is the middle of the job, not the end. Do these four step
    An empty list is a finding too; say so and skip to step 4.
 3. **Refactor swarm.** Call `swarm_resume` on the finished swarm with `mode: "refactor"` and the complete audit list as `instruction`. Keep `design: true` if any item is visual. Supervise it the same way, then run `swarm_result` and the acceptance commands again.
 4. **Final sweep.** This is the one place you work in the workspace yourself. Stop the swarm with `swarm_stop`, then fix every audit item the refactor swarm left unresolved or resolved badly, rerun the acceptance commands, and review the final diff once more. Only then tell the user what was done, what remains, and the `cost` line from each swarm.
+
+## Between stages: start fresh
+
+`swarm_result` writes `handoff.md` in the swarm directory: objective, acceptance criteria, your steers (decisions and confirmed facts), the Lead's summary and verification, open items, and the files to read first. When a stage ends and the next one is a separate piece of work (copy, then design, then release), start the next stage in a new session that reads `handoff.md` and the project's own governing files, not this conversation. A long session re-reads everything it has seen on every turn; a fresh one starts from one page.
 
 Do not skip the audit because the tests are green. Green tests written by the same team that wrote the code prove consistency, not correctness.
 

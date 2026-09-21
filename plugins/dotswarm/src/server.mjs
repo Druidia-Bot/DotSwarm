@@ -36,15 +36,16 @@ const TOOLS = [
   },
   {
     name: 'swarm_status',
-    description: 'Compact state of a swarm: phase, roster, task counts, open questions for you, new findings since the id you pass, filtered tool errors, cost, last Lead message. Pass wait_ms to block until something changes (up to 600000) instead of polling, and since_finding with the latestId from your previous call so you only read new ledger entries.',
+    description: 'Compact state of a swarm: phase, roster, task counts, open questions for you, new findings since the id you pass, filtered tool errors, cost, last Lead message. Pass wait_ms to block (up to 600000) until the swarm needs you: the Lead posts a plan, a question, a failure, three or more warnings or tool errors, or the run goes idle, stops, or fails. Routine progress is held and summarized in findings.newByType; the result names the reason in wake. Pass since_finding with the latestId from your previous call so you only read new ledger entries.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       required: ['swarm_id'],
       properties: {
         swarm_id: { type: 'string' },
-        wait_ms: { type: 'integer', minimum: 0, maximum: 600_000, description: 'Block for a change first. Use 60000 to 300000 while the team is working.' },
-        since_finding: { type: 'string', description: 'The latestId from your previous status call; only newer findings are returned.' },
+        wait_ms: { type: 'integer', minimum: 0, maximum: 600_000, description: 'Block until the swarm needs you or this deadline passes. Use 300000 to 600000 while the team is working.' },
+        since_finding: { type: 'string', description: 'The latestId from your previous status call; only newer findings are returned and considered for waking.' },
+        wake_on: { type: 'string', enum: ['attention', 'any'], description: 'attention (default) wakes only when you need to act; any wakes on every runtime change.' },
       },
     },
   },
@@ -90,7 +91,7 @@ const TOOLS = [
   },
   {
     name: 'swarm_result',
-    description: 'The Lead\'s final report (Summary, Changes, Verification, Unresolved, Handoff), open warnings and failures, task counts, and git diff stat. Pass wait_ms to wait for the Lead to go idle first. Treat the report as claims to verify, not proof.',
+    description: 'The Lead\'s final report (Summary, Changes, Verification, Unresolved, Handoff), warnings and failures nobody answered (ledger.open), open questions, readFirst (changed files where defects are costly: gates, scripts, build config, schema, forms, auth), task counts, cost, and git diff stat. Also writes handoff.md, a one-page brief the next stage starts from in a fresh session. Pass wait_ms to wait for the Lead to go idle first. Treat the report as claims to verify, not proof.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -169,8 +170,13 @@ async function call(name, args) {
     }
     case 'swarm_status': {
       const swarm = manager.get(args.swarm_id);
-      if (args.wait_ms) await swarm.waitForChange(args.wait_ms);
-      return swarm.status({ sinceFinding: args.since_finding });
+      if (!args.wait_ms) return swarm.status({ sinceFinding: args.since_finding });
+      if (args.wake_on === 'any') {
+        const changed = await swarm.waitForChange(args.wait_ms);
+        return { wake: changed ? 'change' : 'timeout', ...swarm.status({ sinceFinding: args.since_finding }) };
+      }
+      const wake = await swarm.waitForAttention(args.wait_ms, { sinceFinding: args.since_finding });
+      return { wake, ...swarm.status({ sinceFinding: args.since_finding }) };
     }
     case 'swarm_steer':
       return manager.get(args.swarm_id).steer(String(args.instruction ?? ''));

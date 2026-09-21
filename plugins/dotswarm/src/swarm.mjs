@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { BENIGN_TOOL_ERRORS, DEFAULTS, PROFILE_NAME, dshBin, dshEnv, findingsServerPath, swarmsDir, toPosix, tokenPrices, workDir } from './config.mjs';
+import { changedFiles, ledgerDigest, renderHandoff } from './digest.mjs';
 import { DshClient } from './dsh-client.mjs';
 import { Findings } from './findings.mjs';
 import { buildLeadPrompt, buildSteerPrompt, parseReport } from './prompt.mjs';
@@ -80,6 +81,29 @@ function swarmPatch({ findingsFile, swarmId }) {
     '        failOnStartupError: true',
     '',
   ].join('\n');
+}
+
+const countBy = (rows, key) => rows.reduce((acc, r) => ({ ...acc, [key(r)]: (acc[key(r)] ?? 0) + 1 }), {});
+
+const WARNING_BURST = 3;
+const TOOL_ERROR_BURST = 3;
+const ATTENTION_POLL_MS = 3000;
+
+/**
+ * Why the coordinator should wake now, or null to keep holding. Routine progress
+ * (discoveries, results, ordinary decisions, board and mail churn) is held back and
+ * summarized at the deadline; plans, questions, failures, bursts of warnings, tool
+ * errors in a burst, and the end of the run wake immediately so drift is still caught early.
+ */
+export function attentionReason({ phase, error, newFindings, openQuestionIds, knownQuestionIds, toolErrorCount, knownToolErrorCount }) {
+  if (error || phase === 'failed') return 'failed';
+  if (phase === 'idle' || phase === 'stopped' || phase === 'detached') return phase;
+  if (openQuestionIds.some((id) => !knownQuestionIds.includes(id))) return 'question';
+  if (newFindings.some((f) => f.type === 'failure')) return 'failure';
+  if (newFindings.some((f) => f.type === 'decision' && /plan/i.test(f.scope))) return 'plan';
+  if (newFindings.filter((f) => f.type === 'warning').length >= WARNING_BURST) return 'warnings';
+  if (toolErrorCount - knownToolErrorCount >= TOOL_ERROR_BURST) return 'tool-errors';
+  return null;
 }
 
 export class Swarm {
@@ -307,6 +331,38 @@ export class Swarm {
     });
   }
 
+  #attentionSnapshot(sinceFinding) {
+    return {
+      phase: this.phase,
+      error: this.error,
+      newFindings: sinceFinding ? this.findings.list({ since: sinceFinding, limit: 500 }).filter((f) => f.type !== 'steer') : [],
+      openQuestionIds: this.openQuestions(50).map((q) => q.id),
+      toolErrorCount: this.state.errors.filter((e) => !BENIGN_TOOL_ERRORS.has(e.code)).length,
+    };
+  }
+
+  /**
+   * Block until the coordinator needs to act (see attentionReason) or timeoutMs passes.
+   * Findings come from a separate process, so this re-checks on a timer as well as on runtime changes.
+   */
+  waitForAttention(timeoutMs, { sinceFinding } = {}) {
+    const since = sinceFinding ?? this.findings.lastId() ?? 'F-000';
+    const start = this.#attentionSnapshot(since);
+    const known = { knownQuestionIds: start.openQuestionIds, knownToolErrorCount: start.toolErrorCount };
+    const check = () => attentionReason({ ...this.#attentionSnapshot(since), ...known });
+    const initial = check();
+    if (initial || timeoutMs <= 0) return Promise.resolve(initial ?? 'timeout');
+    return new Promise((resolve) => {
+      const done = (reason) => {
+        clearTimeout(timer); clearInterval(poll); this.state.off('change', onChange); resolve(reason);
+      };
+      const onChange = () => { const r = check(); if (r) done(r); };
+      const poll = setInterval(onChange, ATTENTION_POLL_MS);
+      const timer = setTimeout(() => done('timeout'), timeoutMs);
+      this.state.on('change', onChange);
+    });
+  }
+
   async stop() {
     if (this.detached) {
       this.phase = 'stopped';
@@ -330,9 +386,8 @@ export class Swarm {
     const s = this.state;
     const findings = this.findings.readAll();
     const lead = s.lastLeadText();
-    const newFindings = sinceFinding
-      ? this.findings.list({ since: sinceFinding, limit: 20 }).filter((f) => f.type !== 'steer')
-      : findings.slice(-5);
+    const sinceRows = sinceFinding ? this.findings.list({ since: sinceFinding, limit: 500 }).filter((f) => f.type !== 'steer') : null;
+    const newFindings = sinceRows ? sinceRows.slice(-20) : findings.slice(-5);
     return {
       swarmId: this.id,
       phase: this.phase,
@@ -353,6 +408,7 @@ export class Swarm {
         count: findings.length,
         latestId: findings.at(-1)?.id ?? null,
         [sinceFinding ? 'new' : 'latest']: newFindings.map((f) => `${f.id} [${f.type}] ${f.scope}: ${f.message.slice(0, 200)}`),
+        ...(sinceRows ? { newByType: countBy(sinceRows, (f) => f.type), ...(sinceRows.length > 20 ? { omitted: sinceRows.length - 20 } : {}) } : {}),
       },
       openQuestions: this.openQuestions(),
       toolErrors: s.errors.filter((e) => !BENIGN_TOOL_ERRORS.has(e.code)).slice(-3),
@@ -418,7 +474,28 @@ export class Swarm {
   async result() {
     const lead = this.state.lastLeadText();
     const report = parseReport(lead);
-    const out = {
+    const findings = this.findings.readAll();
+    const ledger = ledgerDigest(findings);
+    const openQuestions = this.openQuestions().map((q) => `${q.id} (${q.author}): ${q.message}`);
+    let files = null;
+    let gitInfo;
+    if (await isGitRepo(this.workspace)) {
+      try {
+        files = changedFiles(await git(this.workspace, ['status', '--porcelain', '--untracked-files=all']));
+        gitInfo = { changedFiles: files.count, diffStat: (await git(this.workspace, ['diff', '--stat'])).slice(-1500) };
+      } catch (error) {
+        gitInfo = { error: error.message };
+      }
+    }
+    const screens = this.spec.design ? toPosix(path.join(this.dir, 'screens')) : null;
+    const handoffPath = path.join(this.dir, 'handoff.md');
+    try {
+      fs.writeFileSync(handoffPath, renderHandoff({
+        swarmId: this.id, spec: { ...this.spec, workspace: this.workspace, branch: this.branch }, phase: this.phase, report, ledger, openQuestions,
+        steers: findings.filter((f) => f.type === 'steer').map((f) => `${f.id}: ${f.message.slice(0, 600)}`), files, screens,
+      }));
+    } catch { /* best effort; the result below still carries everything */ }
+    return {
       swarmId: this.id,
       phase: this.phase,
       ...(this.error ? { error: this.error.slice(0, 1500) } : {}),
@@ -426,23 +503,16 @@ export class Swarm {
       workspace: this.workspace,
       ...(this.branch ? { branch: this.branch } : {}),
       report: report ?? { raw: lead.slice(-6000) },
-      findings: this.findings.readAll().filter((f) => f.type === 'warning' || f.type === 'failure' || f.type === 'question'),
-      openQuestions: this.openQuestions(),
+      ledger: { open: ledger.open, addressedCount: ledger.addressed.length },
+      openQuestions,
+      ...(files ? { readFirst: files.readFirst } : {}),
+      ...(screens ? { screens } : {}),
+      handoff: toPosix(handoffPath),
       tasks: this.state.taskCounts(),
       cost: this.cost(),
       elapsedSeconds: this.elapsedSeconds(),
+      ...(gitInfo ? { git: gitInfo } : {}),
     };
-    if (await isGitRepo(this.workspace)) {
-      try {
-        out.git = {
-          changedFiles: (await git(this.workspace, ['status', '--porcelain'])).split('\n').filter(Boolean).length,
-          diffStat: (await git(this.workspace, ['diff', '--stat'])).slice(-3000),
-        };
-      } catch (error) {
-        out.git = { error: error.message };
-      }
-    }
-    return out;
   }
 }
 

@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 process.env.DOTSWARM_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-swarm-test-'));
-const { SwarmManager } = await import('../src/swarm.mjs');
+const { SwarmManager, attentionReason } = await import('../src/swarm.mjs');
 const { DshClient } = await import('../src/dsh-client.mjs');
 const fake = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'fake-dsh.mjs');
 
@@ -182,4 +182,63 @@ test('spec validation', () => {
   assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), design: true, model: 'deepseek-v4-pro' }).model, 'deepseek-v4-pro');
   assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), mode: 'refactor' }).mode, 'refactor');
   assert.equal(manager.normalizeSpec({ objective: 'x', workspace: os.tmpdir(), mode: 'nonsense' }).mode, 'build');
+});
+
+test('attentionReason holds routine progress and wakes on what needs the coordinator', () => {
+  const base = { phase: 'running', error: null, newFindings: [], openQuestionIds: [], knownQuestionIds: [], toolErrorCount: 0, knownToolErrorCount: 0 };
+  const f = (type, scope = 'pages/home') => ({ type, scope });
+  assert.equal(attentionReason(base), null);
+  assert.equal(attentionReason({ ...base, newFindings: [f('discovery'), f('result'), f('decision'), f('warning'), f('warning')] }), null);
+  assert.equal(attentionReason({ ...base, newFindings: [f('decision', 'step7/plan')] }), 'plan');
+  assert.equal(attentionReason({ ...base, newFindings: [f('warning'), f('warning'), f('warning')] }), 'warnings');
+  assert.equal(attentionReason({ ...base, newFindings: [f('failure')] }), 'failure');
+  assert.equal(attentionReason({ ...base, openQuestionIds: ['F-004'], knownQuestionIds: ['F-004'] }), null);
+  assert.equal(attentionReason({ ...base, openQuestionIds: ['F-004', 'F-009'], knownQuestionIds: ['F-004'] }), 'question');
+  assert.equal(attentionReason({ ...base, toolErrorCount: 3, knownToolErrorCount: 1 }), null);
+  assert.equal(attentionReason({ ...base, toolErrorCount: 4, knownToolErrorCount: 1 }), 'tool-errors');
+  assert.equal(attentionReason({ ...base, phase: 'idle' }), 'idle');
+  assert.equal(attentionReason({ ...base, phase: 'stopped' }), 'stopped');
+  assert.equal(attentionReason({ ...base, phase: 'detached' }), 'detached');
+  assert.equal(attentionReason({ ...base, error: 'runtime exited' }), 'failed');
+});
+
+test('waitForAttention sleeps through routine findings and wakes on a failure or the end of the run', async (t) => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-ws-'));
+  const manager = new SwarmManager({ launch: fakeLaunch('normal') });
+  t.after(() => manager.shutdownAll());
+  const swarm = await manager.start({ objective: 'Make hello.txt', workspace, max_agents: 1, acceptance_criteria: ['hello.txt exists'] });
+  assert.equal(await swarm.waitForAttention(5000), 'idle');
+
+  const since = swarm.findings.lastId() ?? 'F-000';
+  swarm.phase = 'running';
+  swarm.findings.append({ author: 'lead', type: 'discovery', scope: 'notes', message: 'routine' });
+  assert.equal(await swarm.waitForAttention(200, { sinceFinding: since }), 'timeout');
+  const status = swarm.status({ sinceFinding: since });
+  assert.deepEqual(status.findings.newByType, { discovery: 1 });
+
+  setTimeout(() => swarm.findings.append({ author: 'reviewer', type: 'failure', scope: 'a11y', message: 'broken' }), 100);
+  const started = Date.now();
+  assert.equal(await swarm.waitForAttention(10_000, { sinceFinding: since }), 'failure');
+  assert.ok(Date.now() - started < 5000, 'failure found by the poll, not the deadline');
+});
+
+test('swarm_result carries a compact ledger, risky files first, and writes a handoff', async (t) => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-ws-'));
+  const manager = new SwarmManager({ launch: fakeLaunch('normal') });
+  t.after(() => manager.shutdownAll());
+  const swarm = await manager.start({ objective: 'Make hello.txt', workspace, max_agents: 1, acceptance_criteria: ['hello.txt exists'] });
+  await swarm.waitForAttention(5000);
+  swarm.findings.append({ author: 'reviewer', type: 'failure', scope: 'gate', message: 'release gate exits 0 when blocked' });
+  const fixed = swarm.findings.append({ author: 'reviewer', type: 'warning', scope: 'copy', message: 'too long' });
+  swarm.findings.append({ author: 'lead', type: 'result', scope: 'copy', message: `Trimmed; resolves ${fixed.id}` });
+  await swarm.steer('Owner confirmed: insured and bonded.');
+  const result = await swarm.result();
+  assert.equal(result.ledger.open.length, 1);
+  assert.match(result.ledger.open[0], /release gate/);
+  assert.equal(result.ledger.addressedCount, 1);
+  assert.equal(result.findings, undefined, 'the full ledger is not returned');
+  const handoff = fs.readFileSync(result.handoff, 'utf8');
+  for (const needle of ['# Handoff:', 'Make hello.txt', 'insured and bonded', 'release gate exits 0', 'All done.']) {
+    assert.ok(handoff.includes(needle), `handoff includes ${needle}`);
+  }
 });

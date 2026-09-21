@@ -57,14 +57,32 @@ ${board}
 ${resume.lastLeadMessage ? `PREVIOUS LEAD'S LAST MESSAGE\n${resume.lastLeadMessage}\n\n` : ''}${resume.instruction ? `THE COORDINATOR'S INSTRUCTION FOR THE RESUME\n${resume.instruction}\n\n` : ''}Re-create only the remaining work as tasks, verify what the previous team claimed as complete, then continue to the FINAL REPORT.`;
 }
 
+/** How the reviewer judges work: the standard the coordinator would otherwise have to apply in its own audit. */
+export const REVIEW_STANDARD = `REVIEW STANDARD (give this to the reviewer verbatim)
+- Prove every failure. Reproduce it with a command, a test, or a small fixture and record the evidence in the finding. A claim you cannot reproduce is a question, not a failure.
+- Read the result the way its real user will. For anything people read, read the rendered text as that audience and flag wording that sounds like internal notes, audits, compliance, or tooling. For code, read the diff as its next maintainer.
+- A fact about an outside entity (a company record, a licence, an address, a person) is verified only when the source matches on name and at least one other identifier. Otherwise it is a candidate and must not be presented as fact.
+- Check the checks. A validator, gate, or release script passes review only if it fails when it should: run it against a deliberately bad input and confirm a nonzero exit.
+- Review the whole set, not only each piece: repeated sentences across outputs, claims used where they are not allowed, one piece contradicting another.
+- Record each problem as its own finding of type failure or warning with the file and the exact text or line. Do not approve your own team's work on the user's behalf.`;
+
+/** Defects the coordinator's audit kept finding after green builds; every swarm checks these. */
+export const QUALITY_BAR = `QUALITY BAR
+- Any script that gates a release, build, or deploy exits nonzero when it blocks. A gate that prints a warning and exits 0 is a defect.
+- Validation the build depends on lives in the project and runs from npm scripts or the test suite; never depend on paths outside the workspace.
+- Structured data (JSON-LD, sitemaps, feeds) is generated only from verified facts. Serialize JSON-LD with '<' escaped before injecting it into HTML.
+- Form controls that are required carry the required attribute and aria-required; errors are announced and tied to their field.
+- Rerun the acceptance commands after the final edit, not before it. The FINAL REPORT reflects the last run.`;
+
 /** Screenshot-driven iteration protocol for swarms that touch anything a person sees. */
 export function buildDesignSection({ screensDir }) {
   return `UX AND DESIGN ITERATION
 This swarm's model can see images. Anything a person will look at is not done until it has been rendered, viewed, critiqued, and improved in a real browser.
 - Assign one teammate the designer role for all user-facing screens and components. The reviewer views the final screenshots independently.
 - Run the application locally (dev server or built preview). Render each screen with Playwright at 390x844 and 1440x900. If the project has no Playwright, add it as a devDependency and install chromium; never commit browser binaries or screenshots into the repository.
+- Before every capture wait for document.fonts.ready, scroll the full page so lazy media loads, wait until every visible img is complete with naturalWidth greater than 0 and decoded, then wait two animation frames. A blank or unstyled region in a screenshot is a capture defect: re-capture before judging.
 - Save screenshots outside the repository under ${screensDir} as <screen>-<viewport>-v<round>.png, then view each one with read_image. Do not judge a screen from its DOM or its code.
-- Critique every screenshot against the objective's visual direction and these checks: visual hierarchy, spacing rhythm, typography scale and readability, colour contrast, alignment, overflow or clipping, empty, loading, and error states, focus visibility, touch-target size, and how it looks with content of realistic length. Record each critique as a finding of type discovery with scope ui/<screen>.
+- Critique every screenshot against the objective's visual direction and these checks: visual hierarchy, spacing rhythm, typography scale and readability, colour contrast (text 4.5:1, input borders and focus rings 3:1), alignment, overflow or clipping, empty, loading, and error states, focus visibility, touch targets of at least 44 by 44 px, tables and wide content at 390 px without horizontal scroll, and how it looks with content of realistic length. Measure contrast and target sizes with a script across every route rather than eyeballing them. Record each critique as a finding of type discovery with scope ui/<screen>.
 - Iterate: fix, re-render, view again. At least two rounds per screen; stop when a round produces no material improvement. Keep the best version, not the last one.
 - In the FINAL REPORT Verification section, list every screen with its final screenshot path, the number of rounds, and what changed between the first and final round.`;
 }
@@ -99,21 +117,27 @@ ${spec.objective.trim()}
 ${spec.plan ? `PLAN FROM THE COORDINATOR\n${spec.plan.trim()}\n\n` : ''}ACCEPTANCE CRITERIA
 ${criteria}
 
-${spec.context ? `CONTEXT PACKET\n${spec.context.trim()}\n\n` : ''}${spec.resume ? `${buildResumeSection(spec.resume)}\n\n` : ''}${spec.mode === 'refactor' ? `${buildRefactorSection()}\n\n` : ''}${spec.design ? `${buildDesignSection({ screensDir: spec.screensDir ?? 'the swarm directory' })}\n\n` : ''}SUGGESTED TEAMMATE ROLES
+${spec.context ? `CONTEXT PACKET\n${spec.context.trim()}\n\n` : ''}${spec.resume ? `${buildResumeSection(spec.resume)}\n\n` : ''}${spec.mode === 'refactor' ? `${buildRefactorSection()}\n\n` : ''}${spec.design ? `${buildDesignSection({ screensDir: spec.screensDir ?? 'the swarm directory' })}\n\n` : ''}${QUALITY_BAR}
+
+SUGGESTED TEAMMATE ROLES
 ${bullet(roles)}
 Adjust the roster to the work; fewer teammates is better when the work is small.
 
 HOW TO RUN THE SWARM
-1. Inspect the workspace briefly, then create the shared tasks with team_task_create: one per meaningful work unit, each with a complete description, acceptance criteria, write scopes, and blocked_by dependencies. Record the task plan as a finding of type decision with author lead.
-2. Spawn teammates. Each spawn prompt must contain: the objective in one paragraph, the task ids they own, the acceptance criteria for those tasks, the exact verification commands, and the TEAM PROTOCOL below verbatim.
+1. Inspect the workspace briefly, then create the shared tasks with team_task_create: one per meaningful work unit, each with a complete description, acceptance criteria, write scopes, and blocked_by dependencies. Record the task plan as a finding of type decision with author lead and scope plan; record any later change to the plan the same way. The coordinator wakes on that scope to check the plan before the team builds on it.
+2. Spawn teammates. Each spawn prompt must contain: the objective in one paragraph, the task ids they own, the acceptance criteria for those tasks, the exact verification commands, and the TEAM PROTOCOL below verbatim. The reviewer's prompt also contains the REVIEW STANDARD below verbatim.
 3. Monitor with list_agents, team_task_list, mcp__findings__list_findings, and wait_agent. After each wakeup ask: what do we know, what conflicts, what is unverified, is another teammate actually useful? Redirect with send_message. Reassign or reopen tasks that stall.
    The coordinator's instructions arrive two ways: as a [Coordinator steer] message at your next turn, and immediately as a finding of type steer with author coordinator. After every wait_agent and before completing any task, call mcp__findings__list_findings with since set to the last finding id you have seen, so you read only new entries; apply new steers at once. A steer beginning "TASK REQUEST" becomes a task on the board with team_task_create. Each steer id counts once; do not re-apply one you already handled.
    Anything you need from the coordinator (a decision, a file you must not edit, missing configuration, an approval) is a finding of type question with scope coordinator. The coordinator sees those directly; do not bury them in messages. When the coordinator answers, record the outcome as a finding of type result that names the question id.
    If a build tool, test runner, or package install fails with EPERM, spawn errors, or a sandbox escalation message, do not reverse-engineer the tool. Record a finding of type failure with the exact error and stop that workstream; the coordinator restarts the swarm with a different permission mode.
 4. When all tasks are complete, review the complete diff yourself, run the acceptance verification, and fix or delegate anything that fails.
+   A reviewer's failure or warning is fixed in the work by default. Relax a rule, a limit, or an allow-list only when the rule itself is wrong, and record a finding of type decision that names the finding id and the reason before changing it. Every warning or failure gets a finding of type result or decision that names its id, so the coordinator can see it was answered.
+   After the last edit of any kind, rerun every acceptance command. Do not write the FINAL REPORT from an earlier run.
 5. Finish with the FINAL REPORT format below and nothing after it. Do not stop while a required teammate is still running.
 
 ${WORKER_PROTOCOL}
+
+${REVIEW_STANDARD}
 
 FINAL REPORT (use exactly these headings)
 ## Summary
@@ -133,12 +157,13 @@ export function buildSteerPrompt(instruction, findingId) {
 }
 
 export function suggestedRoles(maxAgents, { design = false } = {}) {
+  // A reviewer comes second: an independent check is worth more than a second pair of hands.
   const all = [
-    'explorer: map the relevant code, record findings, no edits',
     'implementer: make the code changes for assigned tasks',
+    'reviewer: adversarially review the work against the REVIEW STANDARD and record failures with evidence',
     ...(design ? ['designer: render, screenshot, critique, and iterate every user-facing screen'] : []),
+    'explorer: map the relevant code, record findings, no edits',
     'tester: write and run tests against the acceptance criteria',
-    'reviewer: adversarially review the diff and record failures',
     'implementer-2: a second implementer for a disjoint write scope',
     'researcher: read docs or references and record findings',
     'implementer-3: a third implementer for a disjoint write scope',
