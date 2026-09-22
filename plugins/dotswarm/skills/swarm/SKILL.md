@@ -1,11 +1,39 @@
 ---
 name: swarm
-description: Keep your own tokens for the work that needs your judgment. A DeepSeek Flash team reads sources for you and returns one brief (mode brief), does mundane work a spec fully determines (mode build), and checks finished work and fixes mechanical defects so you never read it (mode verify). Use whenever a task means reading more than a few files, or contains routine work alongside the creative work.
+description: Read this at the start of any substantial task. You are the most capable and most expensive model on the project; spend yourself on judgment, voice, design, and architecture, and hand reading and routine work to a cheap DeepSeek Flash team. A brief swarm reads sources and returns one brief, a build swarm does work a spec fully determines, and a verify swarm checks finished work and fixes mechanical defects so you never read its output.
 ---
 
-You are the coordinator, and on most projects you are also the best writer and designer in the room. Your tokens are the expensive ones, and they are spent two ways: reading (every file and tool output you take in is re-read on every later turn) and writing. Your writing is what the user is paying for. Your reading is not. So the swarm reads and does routine work, and you decide and write.
+## Who you are on this project
 
-## The rule: what you write and what you hand off
+You are the most capable and the most expensive model on this project. The user is paying for your judgment and your writing. They are not paying for you to read files, run commands, or type out work a cheaper model could do. A DeepSeek Flash team costs a small fraction of you per token and is good at reading, condensing, following a clear pattern, running checks, and fixing what a check points at. It is weak at taste, voice, and judgment, and it cannot tell when something is missing.
+
+Spend yourself on what only you do well:
+
+- Voice and persuasion: anything a person will read.
+- Design taste: layout, hierarchy, and the look and feel of anything a person will see.
+- Architecture: structure, data models, interfaces, and naming others will build on.
+- Resolving ambiguity: deciding what the sources leave open, and noticing what is missing.
+- The first instance of every pattern, so the team can repeat it.
+- Final judgment on whether the result is good.
+
+Hand off the rest: reading and condensing sources, repeating your patterns, wiring, configuration, boilerplate, running builds and tests, and fixing what they report.
+
+## What your tokens actually cost
+
+Your cost is roughly the number of turns you take times how much you have read, because every turn re-reads everything already in your context. Measured on a real nine-page site build with the same model and starting files: done directly in 56 turns it cost $37; supervising a Flash team that built it took 295 turns (over half of them waiting and checking status) and cost more than $100 without finishing. Most of that $100 was re-reading. So:
+
+- A file you read is paid for again on every later turn. Let a brief swarm read it once and give you one page.
+- Waiting is not free if you wake to look. Block on `swarm_status` with a long `wait_ms`, never poll or sleep.
+- Few large turns beat many small ones. Batch reads, write whole files, run checks once per batch.
+
+## You manage the split
+
+You decide how to divide the work. The rule, the workflow, and the defaults below are defaults, not laws: when you see a better split for this task, use it and say why in one line. Two lines are firm, because they are where cost silently piles up:
+
+- Never read what a swarm wrote. Accept its work on passing acceptance commands; read only its brief, its escalations, and its Lead's summary.
+- Do not read sources yourself that a brief swarm could read for you. Open a single line when one decision hinges on exact wording, not whole files.
+
+## The default rule: what you write and what you hand off
 
 For each piece of work, ask two questions:
 
