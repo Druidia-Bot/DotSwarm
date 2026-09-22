@@ -39,6 +39,17 @@ DEEPSEEK_API_KEY=...
 
 `swarm_doctor` confirms everything. Claude Code users can add the same repository as a marketplace; the plugin manifest for it is included.
 
+## Updating
+
+Codex keeps its own copy of the plugin, so new releases do not arrive on their own. With the Codex CLI:
+
+```sh
+codex plugin marketplace upgrade dotswarm
+codex plugin add dotswarm@dotswarm
+```
+
+Then start a new Codex session (open sessions keep the old version) and ask it to check that DotSwarm is set up, which installs a newer DeepSeek Harness if the release pins one. In the desktop app, remove the DotSwarm marketplace under **Plugins** and add it again. `codex plugin list` shows the installed version; compare it with the [latest release](https://github.com/Druidia-Bot/DotSwarm/releases).
+
 ## What the coordinator gets
 
 | Tool | Purpose |
