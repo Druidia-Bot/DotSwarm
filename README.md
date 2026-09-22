@@ -1,5 +1,7 @@
 # DotSwarm
 
+**Better quality, fewer tokens.**
+
 A Codex plugin that keeps the expensive model running your session for the work that needs its judgment. A team of inexpensive DeepSeek Flash agents, running inside the DeepSeek Harness (`dsh`), does the reading and the routine work: a `brief` swarm reads the sources and returns one condensed brief, a `build` swarm does work a spec fully determines, and a `verify` swarm runs every check and fixes mechanical defects so the coordinator never reads the output. The team coordinates through the harness's experimental Agent Teams subsystem, a shared task board and durable peer mailbox, plus a shared findings ledger that DotSwarm adds. The coordinator writes what users read and see and makes the decisions; it receives compressed state, steers on exceptions, and reads only the brief and the escalations.
 
 ```
@@ -68,6 +70,18 @@ Then start a new Codex session (open sessions keep the old version) and ask it t
 The bundled `swarm` skill tells the coordinator how to use them: a brief swarm reads for it, it writes the creative and judgment work itself in few large turns, it hands off anything a spec and a command fully pin down, a verify swarm checks the result, and it starts each stage in a fresh session from `handoff.md`. It does not read what the swarm wrote; it reads the brief and the escalations. Set `design: true` for anything a person will look at: the team switches to the image-capable `deepseek-flash` model and must render each screen with Playwright at 390x844 and 1440x900, view it with `read_image`, critique it, and iterate at least twice, keeping screenshots outside the repository.
 
 Isolation is on by default: in a git repository the team works in a worktree under the data directory on branch `swarm/<id>`, and `swarm_result` reports the branch for review and merge. Pass `isolate: false` to work directly in the checkout.
+
+## Subagents: taste and images
+
+A swarm is cheap and thorough, but it cannot generate images and its taste is weaker than a frontier model's. `swarm_setup` installs three lean Codex subagents in your Codex home (`~/.codex/agents`) to cover that:
+
+| Agent | Model | For |
+|---|---|---|
+| `dotswarm-designer` | `gpt-6-astra` | visual direction, design systems, logo and brand, the first instance of each page or screen type, judging finished screens |
+| `dotswarm-imager` | `gpt-5.6-terra` | generating raster images from a written specification |
+| `dotswarm-writer` | `gpt-5.6-sol` | prose people read where voice and persuasion matter |
+
+Each starts with about half the usual context (memories, plugins, app guidance and the skills catalog are off: measured 22.2k to 11.5k tokens per turn) and returns paths and a summary, never content. Edit them freely: remove the `# managed-by: dotswarm` line from a file and setup will leave it alone. Change the `model` lines if your account has different models.
 
 ## What is ours and what is upstream
 

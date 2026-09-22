@@ -1,6 +1,6 @@
 ---
 name: swarm
-description: Use when a task means reading many sources, doing routine multi-file work, or checking finished work. You are the most capable and most expensive model on the project; spend yourself on judgment, voice, design, and architecture, and hand reading and routine work to a cheap DeepSeek Flash team. A brief swarm reads sources and returns one brief, a build swarm does work a spec fully determines, and a verify swarm checks finished work and fixes mechanical defects so you never read its output.
+description: Use for multi-step or research-heavy work, routine multi-file work, generating images, or checking finished work. You are the most capable and most expensive model on the project: spend yourself on judgment and decisions, hand reading, routine work and checking to a cheap DeepSeek Flash team through swarm_start, and hand taste and image generation to the lean Codex subagents dotswarm-designer, dotswarm-imager and dotswarm-writer.
 ---
 
 ## Who you are on this project
@@ -94,9 +94,25 @@ Pass `objective`, `acceptance_criteria` with exact commands, `context`, the abso
 
 Brief and verify swarms work in your checkout. Build swarms work in a worktree on branch `swarm/<id>` in a git repository; merge that branch when its acceptance commands pass. Pass `isolate: false` to have a build swarm write straight into your checkout; give it write scopes that do not overlap yours. The default `permission_mode` is `danger-full-access` because the workspace sandbox breaks native toolchains on Windows.
 
+## Who does what
+
+| The work is | Give it to |
+|---|---|
+| Reading, research, condensing sources | a brief swarm (`mode: "brief"`) |
+| Routine or spec-driven files, bulk changes, repeating a pattern, fix-until-green loops | a build swarm (`mode: "build"`) |
+| Checking finished work: builds, tests, validators, screenshots, accessibility, mechanical fixes | a verify swarm (`mode: "verify"`) |
+| Taste: visual direction, design systems, logo and brand, the first instance of each page or screen type, judging how screens look | the `dotswarm-designer` subagent |
+| New raster images from a written specification | the `dotswarm-imager` subagent |
+| Prose people read where voice and persuasion matter | the `dotswarm-writer` subagent, or a swarm when the piece follows a detailed contract |
+| Deciding, arbitrating, answering the owner, approving | you |
+
+The subagents are lean Codex agents that `swarm_setup` installs in your Codex home; spawn them with Codex's own subagent tool by name. They start with about half the usual context, and what they write stays out of yours: they return file paths and a short summary, never content. Give a subagent a brief (a brief swarm's output) and the exact files to produce, not a pile of planning files. If a subagent is missing, run `swarm_setup`.
+
+Two habits keep this cheap. Have a brief swarm condense long planning material before the designer or writer reads it, and let the imager, not you, hold generated images: an image in your context is re-read on every later turn.
+
 ## Images
 
-The DeepSeek team cannot generate raster images. When a stage needs new images, the swarm writes each image's prompt and specification and tells you where they are (an open question to you). You generate those images yourself with your image tool, save them where the specification says, then have the swarm verify, crop, and place them. Say this in the stage's `context` so the team plans for it.
+The DeepSeek team cannot generate raster images. When a stage needs new images, the swarm writes each image's prompt and specification and tells you where they are (an open question to you). Spawn the `dotswarm-imager` subagent with the path of that specification: it generates each image, saves it where the specification says, and reports pass or fail per image. Then have the swarm verify, crop, and place them. Generate images yourself only when no subagent is available. Say this in the stage's `context` so the team plans for it.
 
 ## Owner questions
 

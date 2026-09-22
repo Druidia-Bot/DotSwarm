@@ -7,6 +7,7 @@ import {
   DEFAULTS, DSH_PACKAGE, DSH_VERSION, TEAM_PROFILE_PACKAGE, dataDir, deepseekKeySource, dshBin, dshHome,
   dshInstalled, harnessDir, keyFile, profileDir,
 } from './config.mjs';
+import { agentsStatus, codexHome, installAgents } from './agents.mjs';
 import { installTeamBundle, runDsh, teamBundleInstalled, verifyProfile, writeProfileFiles } from './profile.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -66,6 +67,10 @@ export async function runSetup({ reinstall = false, log = () => {} } = {}) {
     step('profile composes with sdk server + agent team rows', profile.ok, JSON.stringify(profile.rows));
     if (!profile.ok) throw new Error(`profile verification failed: ${profile.tail.slice(-2000)}`);
 
+    const agents = installAgents();
+    step('Codex subagents in ' + codexHome(), agents.every((a) => a.state !== 'missing'),
+      agents.map((a) => `${a.name}: ${a.state}`).join(', '));
+
     const key = deepseekKeySource();
     step('DEEPSEEK_API_KEY', Boolean(key), key ? `from ${key}` : `add DEEPSEEK_API_KEY=... to ${keyFile()}`);
     return { ok: steps.every((s) => s.ok), steps, keyFile: keyFile(), dataDir: dataDir() };
@@ -88,6 +93,10 @@ export async function runDoctor() {
     check(`dsh --version ${v.stdout.trim()}`, v.ok, v.ok ? '' : v.stderr.slice(-300));
   }
   check(`${TEAM_PROFILE_PACKAGE} in profile`, teamBundleInstalled(), teamBundleInstalled() ? profileDir() : 'run swarm_setup');
+  const agents = agentsStatus();
+  check('Codex subagents (designer, imager, writer)', agents.every((a) => a.state !== 'missing'),
+    agents.length ? agents.map((a) => `${a.name}: ${a.state}`).join(', ') : 'no templates found; reinstall the plugin');
+
   const key = deepseekKeySource();
   check('DEEPSEEK_API_KEY', Boolean(key), key ? `from ${key}` : `add DEEPSEEK_API_KEY=... to ${keyFile()}`);
   if (dshInstalled() && teamBundleInstalled()) {
