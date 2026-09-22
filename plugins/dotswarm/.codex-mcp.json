@@ -2,8 +2,11 @@
   "mcpServers": {
     "dotswarm": {
       "command": "node",
-      "args": ["./server.mjs"],
-      "cwd": "."
+      "args": [
+        "./server.mjs"
+      ],
+      "cwd": ".",
+      "tool_timeout_sec": 660
     }
   }
 }
