@@ -2,21 +2,27 @@
 
 **Better quality, fewer tokens.**
 
-A Codex plugin that keeps the expensive model running your session for the work that needs its judgment. A team of inexpensive DeepSeek Flash agents, running inside the DeepSeek Harness (`dsh`), does the reading and the routine work: a `brief` swarm reads the sources and returns one condensed brief, a `build` swarm does work a spec fully determines, and a `verify` swarm runs every check and fixes mechanical defects so the coordinator never reads the output. The team coordinates through the harness's experimental Agent Teams subsystem, a shared task board and durable peer mailbox, plus a shared findings ledger that DotSwarm adds. The coordinator writes what users read and see and makes the decisions; it receives compressed state, steers on exceptions, and reads only the brief and the escalations.
+A Codex plugin that keeps the expensive model running your session for the work that needs its judgment, and hands everything else to cheaper help. A team of inexpensive DeepSeek Flash agents, running inside the DeepSeek Harness (`dsh`), does the reading and the routine work: a `brief` swarm reads the sources and returns one condensed brief, a `build` swarm does work a spec fully determines, and a `verify` swarm runs every check and fixes mechanical defects so the coordinator never reads the output. Three lean Codex subagents cover what a swarm cannot: `dotswarm-designer` for taste, `dotswarm-imager` for generating images, and `dotswarm-writer` for prose that has to persuade. The coordinator decides, arbitrates, and answers the owner; it receives compressed state, steers on exceptions, and reads only briefs, escalations, and the questions meant for the owner.
+
+The subagents are plain Codex agents, so DotSwarm is useful with or without a DeepSeek key: without one you get the subagents and the skill that routes work to them, and the swarm tools start working as soon as you add a key.
 
 ```
-Codex session (any model)
-  └─ plugin: dotswarm  (skill + zero-dependency MCP server)
-       └─ one dsh runtime per swarm   (profile "swarm" = dsh-base + sdk-app + agent-team)
-            ├─ Team Lead (Flash)       plans tasks, spawns teammates, reviews, reports
-            ├─ teammates (Flash)       explore / implement / test / design / review
-            ├─ task board + mailbox    upstream Agent Teams (durable, in the Lead session log)
-            └─ findings ledger         DotSwarm, over MCP, one JSONL per swarm
+Codex session (any model) = the coordinator
+  ├─ plugin: dotswarm  (skill + zero-dependency MCP server)
+  │    └─ one dsh runtime per swarm   (profile "swarm" = dsh-base + sdk-app + agent-team)
+  │         ├─ Team Lead (Flash)       plans tasks, spawns teammates, reviews, reports
+  │         ├─ teammates (Flash)       explore / implement / test / design / review
+  │         ├─ task board + mailbox    upstream Agent Teams (durable, in the Lead session log)
+  │         └─ findings ledger         DotSwarm, over MCP, one JSONL per swarm
+  └─ Codex subagents (installed by swarm_setup, own context, no DeepSeek needed)
+       ├─ dotswarm-designer  taste: direction, design systems, brand, first instances
+       ├─ dotswarm-imager    generates images from a written specification
+       └─ dotswarm-writer    prose people read
 ```
 
 ## Install
 
-Requirements on the machine running Codex: Node.js 22+, git, npm, and pnpm (used once to install the Agent Teams bundle). A DeepSeek API key.
+Requirements on the machine running Codex: Node.js 22+, git, npm, and pnpm (used once to install the Agent Teams bundle). A DeepSeek API key is needed for the swarms; the subagents work without one.
 
 In the Codex desktop app: **Plugins > Add > Add a marketplace**, paste `https://github.com/Druidia-Bot/DotSwarm`, then install **DotSwarm**.
 

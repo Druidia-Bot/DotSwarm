@@ -46,6 +46,11 @@ export async function runSetup({ reinstall = false, log = () => {} } = {}) {
   const steps = [];
   const step = (label, ok, detail = '') => { steps.push({ label, ok, ...(detail ? { detail } : {}) }); log(`${ok ? 'OK' : '!!'}  ${label}${detail ? `  ${detail}` : ''}`); };
   try {
+    // The subagents are plain Codex agents: they work with or without DeepSeek, so install them first.
+    const agents = installAgents();
+    step('Codex subagents in ' + codexHome(), agents.every((a) => a.state !== 'missing'),
+      agents.map((a) => `${a.name}: ${a.state}`).join(', '));
+
     if (!dshInstalled() || (reinstall && !process.env.DOTSWARM_DSH_BIN)) {
       log(`Installing ${DSH_PACKAGE}@${DSH_VERSION} into ${harnessDir()} (a few minutes) ...`);
       await installHarness();
@@ -66,10 +71,6 @@ export async function runSetup({ reinstall = false, log = () => {} } = {}) {
     const profile = await verifyProfile();
     step('profile composes with sdk server + agent team rows', profile.ok, JSON.stringify(profile.rows));
     if (!profile.ok) throw new Error(`profile verification failed: ${profile.tail.slice(-2000)}`);
-
-    const agents = installAgents();
-    step('Codex subagents in ' + codexHome(), agents.every((a) => a.state !== 'missing'),
-      agents.map((a) => `${a.name}: ${a.state}`).join(', '));
 
     const key = deepseekKeySource();
     step('DEEPSEEK_API_KEY', Boolean(key), key ? `from ${key}` : `add DEEPSEEK_API_KEY=... to ${keyFile()}`);

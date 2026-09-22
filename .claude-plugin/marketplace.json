@@ -11,7 +11,7 @@
       "name": "dotswarm",
       "source": "./plugins/dotswarm",
       "description": "Delegate planned coding work to a DeepSeek agent team with a shared task board, mailbox, and findings ledger.",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "category": "productivity"
     }
   ]
