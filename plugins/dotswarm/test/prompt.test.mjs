@@ -61,7 +61,7 @@ test('every multi-agent swarm gets a reviewer and the review standard', () => {
   assert.match(suggestedRoles(2)[1], /^reviewer:/);
   assert.match(suggestedRoles(3, { design: true })[2], /^designer:/);
   const prompt = buildLeadPrompt({ swarmId: 'sw-x', objective: 'Do it', maxAgents: 3, workspace: '/w', design: true });
-  for (const needle of ['REVIEW STANDARD', 'QUALITY BAR', 'exits nonzero when it blocks', 'document.fonts.ready', 'fixed in the work by default', 'After the last edit of any kind']) {
+  for (const needle of ['REVIEW STANDARD', 'QUALITY BAR', 'exits nonzero when it blocks', 'document.fonts.ready', 'fixed in the work by default', 'After the last edit of any kind', 'scope owner', 'cannot generate raster images']) {
     assert.ok(prompt.includes(needle), `lead prompt includes ${needle}`);
   }
 });

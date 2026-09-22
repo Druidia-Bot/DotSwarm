@@ -89,6 +89,8 @@ const WARNING_BURST = 3;
 const TOOL_ERROR_BURST = 3;
 const ATTENTION_POLL_MS = 3000;
 const BRIEF_INLINE_SLACK = 1.2;
+const OWNER_QUESTION_CAP = 3000;
+const isOwnerScope = (scope) => /^owner(\/|$)/i.test(String(scope ?? ''));
 const SCREEN_LIST_CAP = 40;
 
 /**
@@ -306,12 +308,24 @@ export class Swarm {
     return { ...result, note: 'Task request queued as a steer and recorded in the ledger; the Lead creates the board task.' };
   }
 
-  /** Open items the Lead raised for the coordinator: questions, and anything scoped to coordinator. */
+  /** Open items the Lead raised for the coordinator: questions, and anything scoped to coordinator. Owner questions are separate. */
   openQuestions(limit = 10) {
     return this.findings.readAll()
-      .filter((f) => f.type === 'question' || (f.scope === 'coordinator' && f.type !== 'steer'))
+      .filter((f) => !isOwnerScope(f.scope) && (f.type === 'question' || (f.scope === 'coordinator' && f.type !== 'steer')))
       .slice(-limit)
       .map((f) => ({ id: f.id, author: f.author, message: f.message.slice(0, 500) }));
+  }
+
+  /**
+   * Questions for the owner recorded at this run's approval gate, complete and in order,
+   * so the coordinator can show them as one numbered list without paging them out of the Lead.
+   * A resumed swarm inherits the previous stage's ledger, so only this run's questions count.
+   */
+  ownerQuestions() {
+    const since = this.startedAt ? Date.parse(this.startedAt) : 0;
+    return this.findings.readAll()
+      .filter((f) => f.type === 'question' && isOwnerScope(f.scope) && Date.parse(f.time) >= since)
+      .map((f, i) => ({ n: i + 1, id: f.id, text: f.message.slice(0, OWNER_QUESTION_CAP) }));
   }
 
   cost() {
@@ -509,6 +523,7 @@ export class Swarm {
     const findings = this.findings.readAll();
     const ledger = ledgerDigest(findings);
     const openQuestions = this.openQuestions().map((q) => `${q.id} (${q.author}): ${q.message}`);
+    const ownerQuestions = this.ownerQuestions();
     let files = null;
     let gitInfo;
     if (await isGitRepo(this.workspace)) {
@@ -523,7 +538,7 @@ export class Swarm {
     const handoffPath = path.join(this.dir, 'handoff.md');
     try {
       fs.writeFileSync(handoffPath, renderHandoff({
-        swarmId: this.id, spec: { ...this.spec, workspace: this.workspace, branch: this.branch }, phase: this.phase, report, ledger, openQuestions,
+        swarmId: this.id, spec: { ...this.spec, workspace: this.workspace, branch: this.branch }, phase: this.phase, report, ledger, openQuestions, ownerQuestions,
         steers: findings.filter((f) => f.type === 'steer').map((f) => `${f.id}: ${f.message.slice(0, 600)}`), files, screens,
         brief: this.spec.mode === 'brief' ? toPosix(this.briefPath) : undefined,
       }));
@@ -538,6 +553,7 @@ export class Swarm {
       report: report ?? { raw: lead.slice(-6000) },
       ledger: { open: ledger.open, addressedCount: ledger.addressed.length },
       openQuestions,
+      ...(ownerQuestions.length ? { ownerQuestions } : {}),
       ...(files ? { readFirst: files.readFirst } : {}),
       ...(screens ? { screens, screenshots: this.#finalScreens() } : {}),
       handoff: toPosix(handoffPath),

@@ -52,7 +52,7 @@ export function changedFiles(porcelain) {
 }
 
 /** Markdown handoff so the next stage starts from one page instead of a long conversation. */
-export function renderHandoff({ swarmId, spec, phase, report, ledger, openQuestions, steers, files, screens, brief }) {
+export function renderHandoff({ swarmId, spec, phase, report, ledger, openQuestions, ownerQuestions, steers, files, screens, brief }) {
   const list = (items, empty = 'None') => (items?.length ? items.map((x) => `- ${x}`).join('\n') : empty);
   const section = (name) => report?.[name]?.trim() || 'Not reported.';
   return `# Handoff: ${swarmId}
@@ -79,6 +79,7 @@ ${list(ledger.open)}
 
 ## Open questions for the coordinator
 ${list(openQuestions)}
+${ownerQuestions?.length ? `\n## Questions for the owner (show as one numbered list)\n${ownerQuestions.map((q) => `${q.n}. ${q.text}`).join('\n')}\n` : ''}
 
 ## Read these files first
 ${list(files?.readFirst, 'No risky files changed.')}

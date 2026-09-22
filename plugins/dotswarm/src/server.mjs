@@ -92,7 +92,7 @@ const TOOLS = [
   },
   {
     name: 'swarm_result',
-    description: 'The Lead\'s final report (Summary, Changes, Verification, Unresolved, Handoff), warnings and failures nobody answered (ledger.open), open questions, readFirst (changed files where defects are costly: gates, scripts, build config, schema, forms, auth), task counts, cost, and git diff stat. Also writes handoff.md, a one-page brief the next stage starts from in a fresh session. For a brief swarm, brief.text carries the finished brief inline; for a design or verify swarm, screenshots lists the final screenshots. Pass wait_ms to wait for the Lead to go idle first. Treat the report as claims to verify, not proof.',
+    description: 'The Lead\'s final report (Summary, Changes, Verification, Unresolved, Handoff), warnings and failures nobody answered (ledger.open), open questions, readFirst (changed files where defects are costly: gates, scripts, build config, schema, forms, auth), task counts, cost, and git diff stat. Also writes handoff.md, a one-page brief the next stage starts from in a fresh session. For a brief swarm, brief.text carries the finished brief inline; for a design or verify swarm, screenshots lists the final screenshots. At an approval gate, ownerQuestions holds every question for the owner, numbered and complete: show them to the user as one numbered list. Pass wait_ms to wait for the Lead to go idle first. Treat the report as claims to verify, not proof.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -232,5 +232,5 @@ serveStdio({
   tools: TOOLS,
   call,
   onClose: shutdown,
-  instructions: 'DotSwarm runs DeepSeek Flash agent teams so your tokens go to judgment, not reading or routine work. Use mode brief to have the team read sources and return one brief, build for work a spec and a command fully determine, and verify to check finished work and fix mechanical defects. Write what users read or see and make the decisions yourself. Do not read what the swarm wrote: read the brief, openQuestions, and ledger.open. Wait with swarm_status wait_ms 300000 to 600000; never poll. If a tool says setup is needed, call swarm_setup, then swarm_doctor.',
+  instructions: 'DotSwarm runs DeepSeek Flash agent teams so your tokens go to judgment, not reading or routine work. Use mode brief to have the team read sources and return one brief, build for work a spec and a command fully determine, and verify to check finished work and fix mechanical defects. Write what users read or see and make the decisions yourself. Do not read what the swarm wrote: read the brief, openQuestions, ownerQuestions, and ledger.open. The team cannot generate raster images; generate them yourself from the prompts it writes. Wait with swarm_status wait_ms 300000 to 600000; never poll. If a tool says setup is needed, call swarm_setup, then swarm_doctor.',
 });

@@ -280,3 +280,24 @@ test('a design swarm result lists its final screenshots', async (t) => {
   assert.ok(screenshots.every((p) => p.endsWith('-final.png')));
   assert.match(fs.readFileSync(path.join(swarm.dir, 'lead-prompt.md'), 'utf8'), /<screen>-<viewport>-final.png/);
 });
+
+test('owner questions come back complete, numbered, and only from this run', async (t) => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-ws-'));
+  const manager = new SwarmManager({ launch: fakeLaunch('normal') });
+  t.after(() => manager.shutdownAll());
+  const swarm = await manager.start({ objective: 'Stage 2', workspace, max_agents: 1 });
+  await swarm.waitForAttention(5000);
+  // A question left in the ledger by an earlier stage does not count.
+  fs.appendFileSync(swarm.findings.file, JSON.stringify({ id: 'F-900', time: '2000-01-01T00:00:00.000Z', author: 'lead', type: 'question', scope: 'owner', message: 'Old stage question' }) + '\n');
+  const long = `Information needed: ${'x'.repeat(1500)}`;
+  swarm.findings.append({ author: 'lead', type: 'question', scope: 'owner', message: 'Approval: Do you approve the visual direction?' });
+  swarm.findings.append({ author: 'lead', type: 'question', scope: 'coordinator', message: 'Which folder holds the logo?' });
+  swarm.findings.append({ author: 'lead', type: 'question', scope: 'owner/images', message: long });
+  const result = await swarm.result();
+  assert.deepEqual(result.ownerQuestions.map((q) => q.n), [1, 2]);
+  assert.equal(result.ownerQuestions[0].text, 'Approval: Do you approve the visual direction?');
+  assert.equal(result.ownerQuestions[1].text, long, 'long questions are not cut at 500 characters');
+  assert.ok(result.openQuestions.every((q) => !q.includes('visual direction')), 'owner questions stay out of the coordinator list');
+  assert.ok(result.openQuestions.some((q) => q.includes('logo')));
+  assert.match(fs.readFileSync(result.handoff, 'utf8'), /Questions for the owner[\s\S]*1\. Approval: Do you approve/);
+});

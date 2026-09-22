@@ -1,6 +1,6 @@
 ---
 name: swarm
-description: Read this at the start of any substantial task. You are the most capable and most expensive model on the project; spend yourself on judgment, voice, design, and architecture, and hand reading and routine work to a cheap DeepSeek Flash team. A brief swarm reads sources and returns one brief, a build swarm does work a spec fully determines, and a verify swarm checks finished work and fixes mechanical defects so you never read its output.
+description: Use when a task means reading many sources, doing routine multi-file work, or checking finished work. You are the most capable and most expensive model on the project; spend yourself on judgment, voice, design, and architecture, and hand reading and routine work to a cheap DeepSeek Flash team. A brief swarm reads sources and returns one brief, a build swarm does work a spec fully determines, and a verify swarm checks finished work and fixes mechanical defects so you never read its output.
 ---
 
 ## Who you are on this project
@@ -90,13 +90,21 @@ Do not open a browser, take screenshots, or run the checks yourself, and do not 
 
 ## Starting a swarm
 
-Pass `objective`, `acceptance_criteria` with exact commands, `context`, the absolute `workspace`, and `max_agents` (2 or 3 is usually enough). Put everything you already know in `context` now: confirmed facts, constraints, sources the team may cite, validators to reuse, files not to touch. Each fact you hold back becomes a steer later.
+Pass `objective`, `acceptance_criteria` with exact commands, `context`, the absolute `workspace`, and `max_agents` (2 or 3 is usually enough). Set `design: true` only when the stage produces something a person looks at (screens, pages, visual assets); research, planning, and code-only stages leave it off. Put everything you already know in `context` now: confirmed facts, constraints, sources the team may cite, validators to reuse, files not to touch. Each fact you hold back becomes a steer later.
 
 Brief and verify swarms work in your checkout. Build swarms work in a worktree on branch `swarm/<id>` in a git repository; merge that branch when its acceptance commands pass. Pass `isolate: false` to have a build swarm write straight into your checkout; give it write scopes that do not overlap yours. The default `permission_mode` is `danger-full-access` because the workspace sandbox breaks native toolchains on Windows.
 
+## Images
+
+The DeepSeek team cannot generate raster images. When a stage needs new images, the swarm writes each image's prompt and specification and tells you where they are (an open question to you). You generate those images yourself with your image tool, save them where the specification says, then have the swarm verify, crop, and place them. Say this in the stage's `context` so the team plans for it.
+
+## Owner questions
+
+When a stage stops at an approval gate, `swarm_result.ownerQuestions` holds every question for the owner, numbered and in order. Show them to the user exactly as given, as one numbered list, and wait. Do not page them out of the Lead's report with extra steers.
+
 ## While a swarm runs
 
-Call `swarm_status` with `wait_ms` of 300000 to 600000 and `since_finding` set to the `latestId` from your previous call. It blocks until the swarm needs you and says why in `wake`: `plan`, `question`, `failure`, `warnings`, `tool-errors`, `idle`, `stopped`, `failed`, `detached`, or `timeout`. Do not poll and do not sleep between calls.
+Call `swarm_status` with `wait_ms` of 300000 to 600000 and `since_finding` set to the `latestId` from your previous call. It blocks until the swarm needs you and says why in `wake`: `plan`, `question`, `failure`, `warnings`, `tool-errors`, `idle`, `stopped`, `failed`, `detached`, or `timeout`. Do not poll and do not sleep between calls. While you wait, do not write status messages to the user; say something only when a call returns with something to report.
 
 - `plan`: check the plan against your intent once. This is the cheapest point to correct drift.
 - `question`: answer with one `swarm_steer`.
