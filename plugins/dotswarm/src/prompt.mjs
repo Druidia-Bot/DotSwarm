@@ -117,6 +117,7 @@ This swarm proves the work in the workspace meets the acceptance criteria and re
 - Fix mechanical defects directly: failing builds, types, lint, or tests; broken links and imports; measurable accessibility (contrast, target size, labels, required attributes); overflow and clipping; missing files the spec requires; configuration. Each fix is a finding of type result naming the file.
 - Never change judgment content: wording people read, visual direction, architecture, public interfaces, or behaviour beyond the spec. When a defect needs such a change, record a finding of type question with scope coordinator giving the file, the exact text or line, the problem, and a proposed fix. These are the only items the coordinator reads.
 - Keep the escalation list short: one finding per distinct problem, most important first. Do not escalate what you can fix mechanically.
+- When design is on, the coordinator judges the look from your screenshots alone. After the last fix, save one final screenshot of every screen at each viewport as <screen>-<viewport>-final.png in the screens directory, captured with the readiness waits of the design protocol. Name the screens so the page types are obvious (home, service-<name>, city-<name>, contact).
 - The FINAL REPORT Verification section lists every check with its final result after the last fix; Unresolved lists only the escalations by finding id.`;
 }
 

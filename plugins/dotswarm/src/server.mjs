@@ -92,7 +92,7 @@ const TOOLS = [
   },
   {
     name: 'swarm_result',
-    description: 'The Lead\'s final report (Summary, Changes, Verification, Unresolved, Handoff), warnings and failures nobody answered (ledger.open), open questions, readFirst (changed files where defects are costly: gates, scripts, build config, schema, forms, auth), task counts, cost, and git diff stat. Also writes handoff.md, a one-page brief the next stage starts from in a fresh session. Pass wait_ms to wait for the Lead to go idle first. Treat the report as claims to verify, not proof.',
+    description: 'The Lead\'s final report (Summary, Changes, Verification, Unresolved, Handoff), warnings and failures nobody answered (ledger.open), open questions, readFirst (changed files where defects are costly: gates, scripts, build config, schema, forms, auth), task counts, cost, and git diff stat. Also writes handoff.md, a one-page brief the next stage starts from in a fresh session. For a brief swarm, brief.text carries the finished brief inline; for a design or verify swarm, screenshots lists the final screenshots. Pass wait_ms to wait for the Lead to go idle first. Treat the report as claims to verify, not proof.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -170,7 +170,9 @@ async function call(name, args) {
       return {
         swarmId: swarm.id, phase: swarm.phase, workspace: swarm.workspace, branch: swarm.branch, mode: swarm.spec.mode, design: swarm.spec.design, model: swarm.spec.model,
         ...(swarm.spec.mode === 'brief' ? { brief: swarm.briefPath } : {}),
-        hint: 'Call swarm_status with wait_ms of 300000 to 600000; it returns when the team needs you or finishes. Then swarm_result.',
+        hint: swarm.spec.mode === 'brief'
+          ? 'Your next call is swarm_result with wait_ms 600000; it returns the finished brief inline. Until then do not read the sources, skill references, or planning files the brief covers, and do not start writing work that depends on them; reading them now pays for the same material twice. If it returns before the brief is done, call it again.'
+          : 'Call swarm_status with wait_ms of 300000 to 600000; it returns when the team needs you or finishes. Then swarm_result.',
       };
     }
     case 'swarm_status': {

@@ -261,5 +261,22 @@ test('brief and verify swarms work in place; a brief swarm reports its brief', a
   const { brief } = await swarm.result();
   assert.equal(brief.words, 4);
   assert.equal(brief.overBudget, false);
+  assert.equal(brief.text, 'one two three four', 'a finished brief comes back inline');
+  fs.writeFileSync(swarm.briefPath, 'word '.repeat(swarm.spec.briefWords * 2));
+  assert.equal((await swarm.result()).brief.text, undefined, 'an oversized brief is not inlined');
   assert.match(fs.readFileSync(path.join(swarm.dir, 'handoff.md'), 'utf8'), /Brief: .*brief\.md \(read this instead of the sources\)/);
+});
+
+test('a design swarm result lists its final screenshots', async (t) => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-ws-'));
+  const manager = new SwarmManager({ launch: fakeLaunch('normal') });
+  t.after(() => manager.shutdownAll());
+  const swarm = await manager.start({ objective: 'Verify the site', workspace, mode: 'verify', design: true, max_agents: 1 });
+  await swarm.waitForAttention(5000);
+  const screens = path.join(swarm.dir, 'screens');
+  for (const f of ['home-390-final.png', 'home-390-v1.png', 'service-deep-1440-final.png']) fs.writeFileSync(path.join(screens, f), '');
+  const { screenshots } = await swarm.result();
+  assert.equal(screenshots.length, 2);
+  assert.ok(screenshots.every((p) => p.endsWith('-final.png')));
+  assert.match(fs.readFileSync(path.join(swarm.dir, 'lead-prompt.md'), 'utf8'), /<screen>-<viewport>-final.png/);
 });

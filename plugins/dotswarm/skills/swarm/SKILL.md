@@ -28,10 +28,12 @@ Your cost is roughly the number of turns you take times how much you have read, 
 
 ## You manage the split
 
-You decide how to divide the work. The rule, the workflow, and the defaults below are defaults, not laws: when you see a better split for this task, use it and say why in one line. Two lines are firm, because they are where cost silently piles up:
+You decide how to divide the work. The rule, the workflow, and the defaults below are defaults, not laws: when you see a better split for this task, use it and say why in one line. These lines are firm, because they are where cost silently piles up:
 
 - Never read what a swarm wrote. Accept its work on passing acceptance commands; read only its brief, its escalations, and its Lead's summary.
 - Do not read sources yourself that a brief swarm could read for you. Open a single line when one decision hinges on exact wording, not whole files.
+- Wait for the brief. Once a brief swarm is running, your next call is `swarm_result` with `wait_ms` 600000, and you do not read its sources or start writing the work that depends on them until it returns. Reading in parallel pays for the same material twice: in one measured run the coordinator read the sources while the brief was being written and ended up spending more than doing the whole job alone.
+- Do not run QA yourself. Browser sessions, screenshots of every page, Lighthouse, accessibility and overflow checks, and crawls belong to a verify swarm. You view only its final screenshots of each page type, and only its escalations.
 
 ## The default rule: what you write and what you hand off
 
@@ -62,13 +64,15 @@ Do not open the files the swarm changed, its notes, the findings file, or member
 
 ### 1. Brief: let the swarm read
 
-Before writing, if what you would need to read is more than a few files (skills and their references, doctrine, research, prior work, docs, competitor pages, a large codebase), call `swarm_start` with `mode: "brief"`:
+Before writing, if what you would need to read is more than a few files (skills and their references, doctrine, research, prior work, docs, competitor pages, a large codebase), call `swarm_start` with `mode: "brief"`. Make it the first substantial thing you do: before it starts, read only what you need to write its context, which is the task's entry skill file and the project's governing files.
 
 - `objective`: what you are about to produce and for whom.
-- `context`: every source path or URL to read, and what matters most. List the facts the user has confirmed; they are quoted verbatim in the brief.
+- `context`: every source path or URL to read, including the reference files the task's skills point to, and what matters most. List the facts the user has confirmed; they are quoted verbatim in the brief.
 - `brief_words`: the budget, 8000 to 15000 for most work.
 
-Wait with `swarm_status` (see below), then read only `result.brief.path`. The brief quotes rules and facts verbatim with `path:line` pointers. When one decision hinges on exact wording, open that one line; do not reopen whole sources.
+Then call `swarm_result` with `wait_ms: 600000` as your very next call. It blocks until the brief is finished and returns it inline in `brief.text`, so waiting and reading cost one turn. If it returns early with no `brief.text`, call it again. While you wait, commands that produce no reading (installing dependencies, creating an empty scaffold) are fine; reading the brief's sources, or writing anything that depends on them, is not.
+
+The brief quotes rules and facts verbatim with `path:line` pointers. When one decision hinges on exact wording, open that one line; do not reopen whole sources.
 
 ### 2. Write: your part, in few large turns
 
@@ -78,9 +82,11 @@ Hand off routine work under the rule above as soon as its pattern exists, and ke
 
 ### 3. Verify: let the swarm check
 
-When your part and any handed-off work are done, call `swarm_start` with `mode: "verify"`, the complete `acceptance_criteria` with exact commands, and `design: true` if anything is visual. The team runs every check, tests every gate against bad input, fixes mechanical defects itself, and escalates only what needs your judgment as open questions. Read those questions, fix the judgment items yourself, and run another verify only if you changed a lot.
+When your part and any handed-off work are done, call `swarm_start` with `mode: "verify"`, the complete `acceptance_criteria` with exact commands, and `design: true` if anything is visual. Put every check you would otherwise run yourself into the acceptance criteria: build, type check, tests, validators, link crawl, structured-data parity, accessibility, performance, and screenshots at each target width. The team runs them, tests every gate against bad input, fixes mechanical defects itself, and escalates only what needs your judgment as open questions. Wait for it with `swarm_result` and `wait_ms: 600000`.
 
-Do not audit the swarm's work file by file. The verify swarm's checks are the audit for routine work; your judgment goes into what you wrote.
+Judge the look from `result.screenshots`: view the final screenshot of each distinct page type at each width (normally four to six images), and open another only when one of those looks wrong. Read the open questions, fix the judgment items yourself, and run another verify only if you changed a lot.
+
+Do not open a browser, take screenshots, or run the checks yourself, and do not audit the swarm's work file by file. The verify swarm's checks are the audit for routine work; your judgment goes into what you wrote and into those few screenshots.
 
 ## Starting a swarm
 

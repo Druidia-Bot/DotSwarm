@@ -88,6 +88,8 @@ const countBy = (rows, key) => rows.reduce((acc, r) => ({ ...acc, [key(r)]: (acc
 const WARNING_BURST = 3;
 const TOOL_ERROR_BURST = 3;
 const ATTENTION_POLL_MS = 3000;
+const BRIEF_INLINE_SLACK = 1.2;
+const SCREEN_LIST_CAP = 40;
 
 /**
  * Why the coordinator should wake now, or null to keep holding. Routine progress
@@ -483,9 +485,21 @@ export class Swarm {
     try {
       const text = fs.readFileSync(this.briefPath, 'utf8');
       const words = text.split(/\s+/).filter(Boolean).length;
-      return { path: toPosix(this.briefPath), words, budget: this.spec.briefWords, overBudget: words > this.spec.briefWords };
+      const info = { path: toPosix(this.briefPath), words, budget: this.spec.briefWords, overBudget: words > this.spec.briefWords };
+      // Hand the finished brief back in the same call the coordinator waited on, so reading it costs no extra turn.
+      return this.phase === 'idle' && words <= this.spec.briefWords * BRIEF_INLINE_SLACK ? { ...info, text } : info;
     } catch {
       return { path: toPosix(this.briefPath), missing: true };
+    }
+  }
+
+  /** Final screenshots a verify or design swarm saved, so the coordinator views a few by path instead of listing folders. */
+  #finalScreens() {
+    try {
+      return fs.readdirSync(path.join(this.dir, 'screens')).filter((f) => /-final.png$/i.test(f)).sort()
+        .slice(0, SCREEN_LIST_CAP).map((f) => toPosix(path.join(this.dir, 'screens', f)));
+    } catch {
+      return [];
     }
   }
 
@@ -525,7 +539,7 @@ export class Swarm {
       ledger: { open: ledger.open, addressedCount: ledger.addressed.length },
       openQuestions,
       ...(files ? { readFirst: files.readFirst } : {}),
-      ...(screens ? { screens } : {}),
+      ...(screens ? { screens, screenshots: this.#finalScreens() } : {}),
       handoff: toPosix(handoffPath),
       ...(this.spec.mode === 'brief' ? { brief: this.#briefInfo() } : {}),
       tasks: this.state.taskCounts(),
