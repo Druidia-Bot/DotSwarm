@@ -11,7 +11,7 @@ const manager = new SwarmManager();
 const TOOLS = [
   {
     name: 'swarm_start',
-    description: 'Start a DeepSeek Flash agent team on a task you have already planned. Returns a swarm_id immediately; the team runs in the background. Give it your plan as 5 to 15 meaningful work units, not micro-steps: the team decomposes further itself. Provide the absolute workspace path.',
+    description: 'Start a DeepSeek Flash agent team. Use mode brief to have the team read for you, build for mundane work a spec fully determines, and verify to check finished work without reading it yourself. Returns a swarm_id immediately; the team runs in the background. Give it your plan as 5 to 15 meaningful work units, not micro-steps: the team decomposes further itself. Provide the absolute workspace path.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -27,7 +27,8 @@ const TOOLS = [
         isolate: { type: 'boolean', description: 'Run in a fresh git worktree on branch swarm/<id> so the main checkout stays untouched. Default: true whenever the workspace is a git repository. Pass false to work directly in the checkout.' },
         permission_mode: { type: 'string', enum: DEFAULTS.permissionModes, description: `Runtime sandbox for the team (default ${DEFAULTS.permissionMode}). workspace-write confines writes to the workspace but on Windows it also blocks spawning native toolchain binaries such as esbuild and workerd, so npm install, vitest, Astro, and wrangler fail. Use danger-full-access for real build work and rely on the objective's boundaries; use read-only for exploration-only swarms.` },
         design: { type: 'boolean', description: `Set true whenever the work includes anything a person will look at. Switches the team to the image-capable ${DEFAULTS.visionModel} and requires screenshot-driven iteration on every screen (render with Playwright at mobile and desktop sizes, view with read_image, critique, improve, at least two rounds).` },
-        mode: { type: 'string', enum: DEFAULTS.modes, description: 'build (default) or refactor. Refactor swarms resolve an audit list you supply in context or instruction: no new features, behaviour preserved, suite green before and after, one audit id per task, every id accounted for in the report.' },
+        mode: { type: 'string', enum: DEFAULTS.modes, description: 'build (default): implement work you specified. brief: read the sources named in objective and context and write one condensed brief (result.brief.path) you read instead of the sources; nothing in the workspace changes. verify: run every acceptance command and standard check, fix mechanical defects in place, and escalate only judgment problems as open questions. refactor: resolve an audit list you supply. Brief and verify work in the checkout; build and refactor use a worktree in a git repo.' },
+        brief_words: { type: 'integer', minimum: 1000, maximum: DEFAULTS.briefWordsCap, description: `Word budget for a brief swarm's brief (default ${DEFAULTS.briefWords}).` },
         model: { type: 'string', description: `Model for every team member (default ${DEFAULTS.model}; design swarms default to ${DEFAULTS.visionModel}).` },
         reasoning_effort: { type: 'string', enum: ['off', 'low', 'high', 'max'], description: 'DeepSeek reasoning effort for the team.' },
         max_tokens: { type: 'integer', minimum: 1024, description: 'Per-response output token cap for team members.' },
@@ -166,7 +167,11 @@ async function call(name, args) {
       if (!dshInstalled()) throw new Error(setupHint('DeepSeek Harness is not installed.'));
       if (!deepseekKeySource()) throw new Error(`No DEEPSEEK_API_KEY found in the environment or in ${keyFile()}. Ask the user to add it, then retry.`);
       const swarm = await manager.start(args);
-      return { swarmId: swarm.id, phase: swarm.phase, workspace: swarm.workspace, branch: swarm.branch, mode: swarm.spec.mode, design: swarm.spec.design, model: swarm.spec.model, hint: 'Call swarm_status with wait_ms while the team works; swarm_result when phase is idle.' };
+      return {
+        swarmId: swarm.id, phase: swarm.phase, workspace: swarm.workspace, branch: swarm.branch, mode: swarm.spec.mode, design: swarm.spec.design, model: swarm.spec.model,
+        ...(swarm.spec.mode === 'brief' ? { brief: swarm.briefPath } : {}),
+        hint: 'Call swarm_status with wait_ms of 300000 to 600000; it returns when the team needs you or finishes. Then swarm_result.',
+      };
     }
     case 'swarm_status': {
       const swarm = manager.get(args.swarm_id);
@@ -225,5 +230,5 @@ serveStdio({
   tools: TOOLS,
   call,
   onClose: shutdown,
-  instructions: 'DotSwarm runs DeepSeek Flash agent teams. Plan first, then swarm_start; supervise with swarm_status (use wait_ms and since_finding); steer only on exceptions; verify swarm_result yourself. If a tool says setup is needed, call swarm_setup, then swarm_doctor.',
+  instructions: 'DotSwarm runs DeepSeek Flash agent teams so your tokens go to judgment, not reading or routine work. Use mode brief to have the team read sources and return one brief, build for work a spec and a command fully determine, and verify to check finished work and fix mechanical defects. Write what users read or see and make the decisions yourself. Do not read what the swarm wrote: read the brief, openQuestions, and ledger.open. Wait with swarm_status wait_ms 300000 to 600000; never poll. If a tool says setup is needed, call swarm_setup, then swarm_doctor.',
 });

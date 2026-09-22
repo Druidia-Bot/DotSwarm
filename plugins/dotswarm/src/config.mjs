@@ -28,7 +28,11 @@ export const DEFAULTS = Object.freeze({
   model: 'deepseek-v4-flash',
   // The only image-capable model the API currently lists; design swarms need read_image.
   visionModel: 'deepseek-flash',
-  modes: ['build', 'refactor'],
+  // build: implement a spec. brief: read sources and condense them for the coordinator.
+  // verify: run every check and fix mechanical defects. refactor: resolve an audit list.
+  modes: ['build', 'brief', 'verify', 'refactor'],
+  briefWords: 12_000,
+  briefWordsCap: 30_000,
   maxAgents: 3,
   maxAgentsCap: 7,
   // workspace-write blocks spawning native toolchain binaries on Windows (esbuild, workerd).

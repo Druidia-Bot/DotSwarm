@@ -223,7 +223,10 @@ export class Swarm {
       });
       const screensDir = path.join(this.dir, 'screens');
       if (this.spec.design) fs.mkdirSync(screensDir, { recursive: true });
-      const prompt = buildLeadPrompt({ ...this.spec, workspace: this.workspace, isolated: Boolean(this.branch), screensDir: toPosix(screensDir) });
+      const prompt = buildLeadPrompt({
+        ...this.spec, workspace: this.workspace, isolated: Boolean(this.branch), screensDir: toPosix(screensDir),
+        briefPath: toPosix(this.briefPath), notesDir: toPosix(path.join(this.dir, 'notes')),
+      });
       fs.writeFileSync(path.join(this.dir, 'lead-prompt.md'), prompt);
       await this.#prompt(prompt, 'objective');
       this.phase = 'running';
@@ -261,6 +264,11 @@ export class Swarm {
     this.branch = `swarm/${this.id}`;
     await git(this.spec.workspace, ['worktree', 'add', '-b', this.branch, worktree, 'HEAD']);
     this.workspace = worktree;
+  }
+
+  /** Where a brief swarm writes its brief: outside the workspace, next to the ledger. */
+  get briefPath() {
+    return path.join(this.dir, 'brief.md');
   }
 
   get alive() {
@@ -471,6 +479,16 @@ export class Swarm {
     }
   }
 
+  #briefInfo() {
+    try {
+      const text = fs.readFileSync(this.briefPath, 'utf8');
+      const words = text.split(/\s+/).filter(Boolean).length;
+      return { path: toPosix(this.briefPath), words, budget: this.spec.briefWords, overBudget: words > this.spec.briefWords };
+    } catch {
+      return { path: toPosix(this.briefPath), missing: true };
+    }
+  }
+
   async result() {
     const lead = this.state.lastLeadText();
     const report = parseReport(lead);
@@ -493,6 +511,7 @@ export class Swarm {
       fs.writeFileSync(handoffPath, renderHandoff({
         swarmId: this.id, spec: { ...this.spec, workspace: this.workspace, branch: this.branch }, phase: this.phase, report, ledger, openQuestions,
         steers: findings.filter((f) => f.type === 'steer').map((f) => `${f.id}: ${f.message.slice(0, 600)}`), files, screens,
+        brief: this.spec.mode === 'brief' ? toPosix(this.briefPath) : undefined,
       }));
     } catch { /* best effort; the result below still carries everything */ }
     return {
@@ -508,6 +527,7 @@ export class Swarm {
       ...(files ? { readFirst: files.readFirst } : {}),
       ...(screens ? { screens } : {}),
       handoff: toPosix(handoffPath),
+      ...(this.spec.mode === 'brief' ? { brief: this.#briefInfo() } : {}),
       tasks: this.state.taskCounts(),
       cost: this.cost(),
       elapsedSeconds: this.elapsedSeconds(),
@@ -555,10 +575,12 @@ export class SwarmManager {
     const workspace = path.resolve(input.workspace || process.env.DOTSWARM_WORKSPACE || process.cwd());
     if (!fs.existsSync(workspace) || !fs.statSync(workspace).isDirectory()) throw new Error(`workspace does not exist: ${workspace}`);
     const maxAgents = Math.max(1, Math.min(Number(input.max_agents ?? DEFAULTS.maxAgents) || DEFAULTS.maxAgents, DEFAULTS.maxAgentsCap));
-    // Isolation is the default wherever it is possible: a git repo gets its own worktree.
-    const isolate = input.isolate === undefined ? isGitRepoSync(workspace) : Boolean(input.isolate);
-    const design = Boolean(input.design);
     const mode = DEFAULTS.modes.includes(input.mode) ? input.mode : 'build';
+    // Build and refactor swarms get their own worktree in a git repo. Brief swarms only read, and
+    // verify swarms check and repair the coordinator's own checkout, so both work in place.
+    const inPlace = mode === 'brief' || mode === 'verify';
+    const isolate = input.isolate === undefined ? (!inPlace && isGitRepoSync(workspace)) : Boolean(input.isolate);
+    const design = Boolean(input.design);
     // A design swarm must see its screenshots; the default model is text-only.
     const model = input.model ? String(input.model) : (design ? DEFAULTS.visionModel : DEFAULTS.model);
     return {
@@ -573,6 +595,7 @@ export class SwarmManager {
       maxAgents,
       workspace,
       isolate,
+      ...(mode === 'brief' ? { briefWords: Math.max(1000, Math.min(Number(input.brief_words ?? DEFAULTS.briefWords) || DEFAULTS.briefWords, DEFAULTS.briefWordsCap)) } : {}),
       permissionMode: DEFAULTS.permissionModes.includes(input.permission_mode) ? input.permission_mode : DEFAULTS.permissionMode,
       provider: input.provider ? String(input.provider) : DEFAULTS.provider,
       model,

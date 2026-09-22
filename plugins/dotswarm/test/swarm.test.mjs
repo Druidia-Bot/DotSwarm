@@ -242,3 +242,24 @@ test('swarm_result carries a compact ledger, risky files first, and writes a han
     assert.ok(handoff.includes(needle), `handoff includes ${needle}`);
   }
 });
+
+test('brief and verify swarms work in place; a brief swarm reports its brief', async (t) => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-ws-'));
+  execFileSync('git', ['init', '-q'], { cwd: workspace });
+  const manager = new SwarmManager({ launch: fakeLaunch('normal') });
+  t.after(() => manager.shutdownAll());
+  assert.equal(manager.normalizeSpec({ objective: 'x', workspace }).isolate, true);
+  assert.equal(manager.normalizeSpec({ objective: 'x', workspace, mode: 'verify' }).isolate, false);
+  assert.equal(manager.normalizeSpec({ objective: 'x', workspace, mode: 'brief', brief_words: 50 }).briefWords, 1000);
+
+  const swarm = await manager.start({ objective: 'Brief the sources', workspace, mode: 'brief', max_agents: 1 });
+  assert.equal(swarm.branch, null, 'no worktree for a brief swarm');
+  assert.match(fs.readFileSync(path.join(swarm.dir, 'lead-prompt.md'), 'utf8'), /BRIEF MODE/);
+  await swarm.waitForAttention(5000);
+  assert.equal((await swarm.result()).brief.missing, true);
+  fs.writeFileSync(swarm.briefPath, 'one two three four');
+  const { brief } = await swarm.result();
+  assert.equal(brief.words, 4);
+  assert.equal(brief.overBudget, false);
+  assert.match(fs.readFileSync(path.join(swarm.dir, 'handoff.md'), 'utf8'), /Brief: .*brief\.md \(read this instead of the sources\)/);
+});

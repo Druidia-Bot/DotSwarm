@@ -87,6 +87,39 @@ This swarm's model can see images. Anything a person will look at is not done un
 - In the FINAL REPORT Verification section, list every screen with its final screenshot path, the number of rounds, and what changed between the first and final round.`;
 }
 
+/** Rules for a swarm that reads so the coordinator does not have to. */
+export function buildBriefSection({ briefPath, briefWords, notesDir }) {
+  return `BRIEF MODE
+This swarm reads the sources named in the objective and context and writes one brief. The coordinator is the strongest writer on the project and will produce the final work from this brief alone, without opening the sources. Everything it needs must be in the brief; nothing else should be.
+- Do not modify the workspace. Teammates write working notes under ${notesDir}/<name>.md; the Lead writes the brief to ${briefPath}.
+- Budget: at most ${briefWords} words. Cut explanation, never facts, rules, or numbers.
+- Quote verbatim, never paraphrase: rules and requirements, statements from the owner or user, required or forbidden wording, legal and claim language, names, numbers, and dates. Paraphrase only background explanation.
+- Every quoted rule and fact carries its source as path:line. Mark each fact confirmed (stated by the owner or an authoritative source that matches) or candidate (anything else).
+- Do not make creative choices. Voice, design, structure, and architecture are the coordinator's decisions; report what the sources require, allow, and forbid, and the options they offer.
+- Structure the brief with these headings:
+  1. Task: what the coordinator must produce and how success is judged.
+  2. Hard rules: verbatim, with sources.
+  3. Facts: verbatim, with sources and confirmed or candidate.
+  4. Deliverables: one packet per thing the coordinator will produce, with its purpose, audience, what it must include, what it must avoid, and source pointers.
+  5. Reuse: existing patterns, files, interfaces, conventions, and commands the work must follow, with paths.
+  6. Conflicts and gaps: where sources disagree (quote both) and what no source answers.
+  7. Source map: every source read, one line each on what it holds; sources skipped and why.
+- Split the reading across teammates by source. A brief-checker teammate then verifies every quoted rule and fact in the draft against its source line, confirms every source appears in the source map, and checks the word budget; its failures are fixed before the report.
+- The FINAL REPORT Summary gives the brief path, its word count, the number of sources covered, and the open conflicts.`;
+}
+
+/** Rules for a swarm that proves work is done so the coordinator never reads it. */
+export function buildVerifySection() {
+  return `VERIFY MODE
+This swarm proves the work in the workspace meets the acceptance criteria and repairs mechanical defects, so the coordinator never has to read the work itself.
+- Run every acceptance command and the project's standard checks: install, build, type check, tests, lint, and any validators. For anything a person sees, render and inspect it as the design protocol describes when design is on, and measure contrast, target size, and overflow with scripts.
+- Check the checks: run each gate or validator against a deliberately bad input and confirm it fails.
+- Fix mechanical defects directly: failing builds, types, lint, or tests; broken links and imports; measurable accessibility (contrast, target size, labels, required attributes); overflow and clipping; missing files the spec requires; configuration. Each fix is a finding of type result naming the file.
+- Never change judgment content: wording people read, visual direction, architecture, public interfaces, or behaviour beyond the spec. When a defect needs such a change, record a finding of type question with scope coordinator giving the file, the exact text or line, the problem, and a proposed fix. These are the only items the coordinator reads.
+- Keep the escalation list short: one finding per distinct problem, most important first. Do not escalate what you can fix mechanically.
+- The FINAL REPORT Verification section lists every check with its final result after the last fix; Unresolved lists only the escalations by finding id.`;
+}
+
 /** Rules for a swarm whose job is to act on the coordinator's audit, not to build. */
 export function buildRefactorSection() {
   return `REFACTOR MODE
@@ -98,8 +131,15 @@ This swarm exists to resolve the audit items the coordinator listed in the instr
 - The FINAL REPORT Changes section maps each audit id to what was done, and the Unresolved section lists every id not resolved.`;
 }
 
+function modeSection(spec) {
+  if (spec.mode === 'refactor') return `${buildRefactorSection()}\n\n`;
+  if (spec.mode === 'brief') return `${buildBriefSection({ briefPath: spec.briefPath ?? 'brief.md', briefWords: spec.briefWords ?? 12000, notesDir: spec.notesDir ?? 'notes' })}\n\n`;
+  if (spec.mode === 'verify') return `${buildVerifySection()}\n\n`;
+  return '';
+}
+
 export function buildLeadPrompt(spec) {
-  const roles = spec.roles?.length ? spec.roles : suggestedRoles(spec.maxAgents, { design: Boolean(spec.design) });
+  const roles = spec.roles?.length ? spec.roles : suggestedRoles(spec.maxAgents, { design: Boolean(spec.design), mode: spec.mode });
   const criteria = spec.acceptanceCriteria?.length
     ? bullet(spec.acceptanceCriteria)
     : '- The objective is met and every change is verified by running the relevant tests or commands.';
@@ -117,7 +157,7 @@ ${spec.objective.trim()}
 ${spec.plan ? `PLAN FROM THE COORDINATOR\n${spec.plan.trim()}\n\n` : ''}ACCEPTANCE CRITERIA
 ${criteria}
 
-${spec.context ? `CONTEXT PACKET\n${spec.context.trim()}\n\n` : ''}${spec.resume ? `${buildResumeSection(spec.resume)}\n\n` : ''}${spec.mode === 'refactor' ? `${buildRefactorSection()}\n\n` : ''}${spec.design ? `${buildDesignSection({ screensDir: spec.screensDir ?? 'the swarm directory' })}\n\n` : ''}${QUALITY_BAR}
+${spec.context ? `CONTEXT PACKET\n${spec.context.trim()}\n\n` : ''}${spec.resume ? `${buildResumeSection(spec.resume)}\n\n` : ''}${modeSection(spec)}${spec.design ? `${buildDesignSection({ screensDir: spec.screensDir ?? 'the swarm directory' })}\n\n` : ''}${spec.mode === 'brief' ? '' : QUALITY_BAR}
 
 SUGGESTED TEAMMATE ROLES
 ${bullet(roles)}
@@ -156,7 +196,23 @@ export function buildSteerPrompt(instruction, findingId) {
   return `[Coordinator steer]${findingId ? ` (${findingId})` : ''}\n${instruction.trim()}\n\nApply this now. If it changes the task plan, update the task board and tell affected teammates. Continue until the FINAL REPORT is complete.`;
 }
 
-export function suggestedRoles(maxAgents, { design = false } = {}) {
+export function suggestedRoles(maxAgents, { design = false, mode = 'build' } = {}) {
+  if (mode === 'brief') {
+    return [
+      'reader: read an assigned set of sources and write verbatim notes with path:line',
+      'brief-checker: verify every quoted rule and fact in the draft brief against its source and check coverage and budget',
+      'reader-2: read a second, disjoint set of sources',
+      'reader-3: read a third, disjoint set of sources',
+    ].slice(0, Math.max(1, Math.min(maxAgents, 4)));
+  }
+  if (mode === 'verify') {
+    return [
+      'checker: run every acceptance command and standard check and record exact results',
+      'fixer: repair mechanical defects the checker finds, within the verify rules',
+      ...(design ? ['designer: render and measure every user-facing screen'] : []),
+      'gate-tester: run each gate and validator against deliberately bad input',
+    ].slice(0, Math.max(1, Math.min(maxAgents, 4)));
+  }
   // A reviewer comes second: an independent check is worth more than a second pair of hands.
   const all = [
     'implementer: make the code changes for assigned tasks',

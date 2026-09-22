@@ -1,63 +1,89 @@
 ---
 name: swarm
-description: Delegate a planned, multi-file coding task to a DeepSeek Flash agent team through swarm_start, then supervise it with swarm_status, swarm_steer, swarm_task_add, and swarm_result. Use when the work is large enough that doing it yourself would fill your context with file reads, edits, and test runs.
+description: Keep your own tokens for the work that needs your judgment. A DeepSeek Flash team reads sources for you and returns one brief (mode brief), does mundane work a spec fully determines (mode build), and checks finished work and fixes mechanical defects so you never read it (mode verify). Use whenever a task means reading more than a few files, or contains routine work alongside the creative work.
 ---
 
-You are the coordinator: the architect and foreman. Whichever model runs this Codex session plays that role. The swarm is the crew. You manage state, not conversation, and you do not pick up tools while the crew is working.
+You are the coordinator, and on most projects you are also the best writer and designer in the room. Your tokens are the expensive ones, and they are spent two ways: reading (every file and tool output you take in is re-read on every later turn) and writing. Your writing is what the user is paying for. Your reading is not. So the swarm reads and does routine work, and you decide and write.
 
-## The foreman rule
+## The rule: what you write and what you hand off
 
-While a swarm is running you do not edit, create, or delete files in its workspace, and you do not run its build, tests, or probes. Every fix you notice becomes `swarm_task_add`; every decision becomes `swarm_steer`. Doing the work yourself costs your tokens, collides with teammates' edits, and defeats the purpose. The one exception is `swarm_result` verification after the Lead is idle.
+For each piece of work, ask two questions:
 
-## When to swarm
+1. Could a competent junior finish it correctly from a written spec, with no taste or judgment calls left open?
+2. Can a command tell whether it was done right (a build, a type check, a test, a validator, a linter, a schema check, a script that measures it)?
 
-Swarm when the task needs several files touched, tests run, and iteration, and when you can state acceptance criteria. Do not swarm for a one-file fix, a question, or anything you cannot yet specify.
+If both answers are yes, hand it off: `swarm_start` with `mode: "build"`. Otherwise write it yourself.
 
-## Before swarm_start
+You write: anything the user or their customers will read (copy, messages, docs meant for people), visual and interaction design, naming and structure of public interfaces, architecture and data models, the first instance of any pattern, and every decision the sources leave open.
 
-1. Understand the request. Read only what you need to plan: repo layout, entry points, the test command.
-2. Write the plan as 5 to 15 meaningful work units with dependencies and the files each touches. Do not write micro-steps; the team breaks work down itself. Include every file the team may need to touch, including root configs and docs; do not reserve files for yourself.
-3. Write acceptance criteria that are checkable, including exact commands.
-4. Write a short context packet: decisions already made, facts the user has confirmed, constraints, sources the team may cite, validators to reuse rather than rebuild, and files not to touch. Everything you already know goes in now: each fact you hold back becomes a steer mid-run, and late facts cause rework. Never paste the conversation, credentials, or unrelated private context.
+You hand off: repeating a pattern you wrote once across more files, wiring and plumbing between parts you designed, configuration, boilerplate, data transforms, renames and moves, test scaffolding, generated files, fixture data, and anything else a spec and a command fully pin down.
 
-Call `swarm_start` with `objective`, `plan`, `acceptance_criteria`, `context`, the absolute `workspace`, and `max_agents`. Ask for a reviewer or verifier role in `roles`; an adversarial reviewer finds defects before completion. Set `design: true` whenever the work includes anything a person will look at: the team then runs on the image-capable model and must render, screenshot, view, critique, and improve every screen at mobile and desktop sizes for at least two rounds. Include the visual direction and any design skill path in `context`. In a git repository the team works in its own worktree on branch `swarm/<id>` by default; you review and merge that branch afterwards. Pass `isolate: false` only when the user wants edits directly in the checkout. The default `permission_mode` is `danger-full-access` because the workspace sandbox breaks native toolchains on Windows; use `read-only` for exploration swarms.
+When you hand work off, write the first instance yourself, name it in the plan as the pattern to follow, give each task explicit write scopes, and give acceptance commands that prove it. You may keep writing files outside those write scopes while the swarm runs.
 
-## If the swarm is detached
+## Do not read the swarm's output
 
-After a Codex restart, `swarm_list` shows earlier swarms with phase `detached`. Their work on disk and their ledger survive; their teammates do not. Call `swarm_resume` with the swarm id and an `instruction` saying what remains and what to re-verify. The new team starts on the same worktree with the old task board, the whole ledger, and the old Lead's last report. Do not start a fresh `swarm_start` for the same objective; that discards the ledger.
+Reading what the swarm wrote costs you what writing it would have. Accept delegated work when its acceptance commands pass. What you read from a swarm is limited to:
 
-## While it runs
+- the brief a brief swarm wrote for you (that is its purpose);
+- `openQuestions` and `ledger.open` from `swarm_status` or `swarm_result`;
+- the Lead's Summary.
 
-Call `swarm_status` with `wait_ms` of 300000 to 600000 and `since_finding` set to the `latestId` from your previous call. The call blocks until the swarm needs you, and `wake` says why: `plan`, `question`, `failure`, `warnings`, `tool-errors`, `idle`, `stopped`, `failed`, `detached`, or `timeout`. Routine progress is held back and counted in `findings.newByType`, so every call is worth reading and you should not poll. Each result is a compressed state. Read `openQuestions` first: those are items the Lead needs from you. On `plan`, check the plan against the spec before the team builds on it; that is the cheapest point to correct drift. Then ask: what conflicts, what is unverified, is the team stuck? Act only on exceptions:
+Do not open the files the swarm changed, its notes, the findings file, or member transcripts. If you doubt something, add a check to the acceptance commands or start a verify swarm; do not read to find out.
 
-- An open question: answer with one `swarm_steer`.
-- A finding of type failure or warning that changes the plan: `swarm_steer` with the decision.
-- Work you noticed is missing: `swarm_task_add`, not your own edit.
-- Tasks not moving across two `timeout` wakes: inspect `member:<name>` or `errors`, then steer or stop.
-- Runaway cost or the wrong direction: `swarm_stop`.
+## The workflow
 
-Keep steers rare. One steer per decision, never a running commentary. Do not read member transcripts, the findings file, or the team's planning notes yourself; `swarm_status` already carries what you need and every file you open costs your context on every later turn. If something needs checking, `swarm_task_add` it and let the team read.
+### 1. Brief: let the swarm read
 
-## When it finishes: verify, audit, refactor, sweep
+Before writing, if what you would need to read is more than a few files (skills and their references, doctrine, research, prior work, docs, competitor pages, a large codebase), call `swarm_start` with `mode: "brief"`:
 
-A swarm reporting done is the middle of the job, not the end. Do these four steps in order.
+- `objective`: what you are about to produce and for whom.
+- `context`: every source path or URL to read, and what matters most. List the facts the user has confirmed; they are quoted verbatim in the brief.
+- `brief_words`: the budget, 8000 to 15000 for most work.
 
-1. **Verify.** When `phase` is `idle` and `reportReady` is true, call `swarm_result`. The report is a set of claims. Start from its digest: `ledger.open` is every warning and failure nobody answered, `openQuestions` is what the Lead needs from you, and `readFirst` lists the changed files where defects are costly (gates, scripts, build config, schema, forms, auth). Run the acceptance commands yourself. For a design swarm, view the final screenshots of the key screens at both sizes; open the rest only when one looks wrong.
-2. **Audit.** Read every file in `readFirst` fully, every item in `ledger.open`, and a sample of the other changed files chosen for risk, not the whole diff. The team's reviewer already applied the review standard to everything; your audit is the judgment it cannot supply. Also run each gate or validator against one deliberately bad input and confirm it fails. Judge on four axes and write a numbered audit list with ids A-1, A-2, and so on, each naming files and the concrete problem:
-   - Alignment: does it do what the objective and doctrine asked, no more and no less? Silent scope changes, invented requirements, disabled or weakened tests.
-   - Gotchas: race conditions, error paths that swallow failures, unverified assumptions recorded as findings, hard-coded paths or secrets, platform-specific behaviour, TODOs left behind.
-   - Organization: duplicated abstractions across teammates' scopes, inconsistent naming, modules split along team ownership instead of the domain, dead code, missing or misplaced tests.
-   - Design, when applicable: screens that still fail the critique checks, inconsistent tokens or spacing, states that were never rendered.
-   An empty list is a finding too; say so and skip to step 4.
-3. **Refactor swarm.** Call `swarm_resume` on the finished swarm with `mode: "refactor"` and the complete audit list as `instruction`. Keep `design: true` if any item is visual. Supervise it the same way, then run `swarm_result` and the acceptance commands again.
-4. **Final sweep.** This is the one place you work in the workspace yourself. Stop the swarm with `swarm_stop`, then fix every audit item the refactor swarm left unresolved or resolved badly, rerun the acceptance commands, and review the final diff once more. Only then tell the user what was done, what remains, and the `cost` line from each swarm.
+Wait with `swarm_status` (see below), then read only `result.brief.path`. The brief quotes rules and facts verbatim with `path:line` pointers. When one decision hinges on exact wording, open that one line; do not reopen whole sources.
+
+### 2. Write: your part, in few large turns
+
+Start this in a fresh session when the brief stage ran long (see Between stages). Read the brief and the project's own governing files, then write. Batch your work: read what you need in one call, write whole files in single edits, run the build once per batch rather than after every file. Every turn re-reads your context, so fewer, larger turns are cheaper.
+
+Hand off routine work under the rule above as soon as its pattern exists, and keep writing.
+
+### 3. Verify: let the swarm check
+
+When your part and any handed-off work are done, call `swarm_start` with `mode: "verify"`, the complete `acceptance_criteria` with exact commands, and `design: true` if anything is visual. The team runs every check, tests every gate against bad input, fixes mechanical defects itself, and escalates only what needs your judgment as open questions. Read those questions, fix the judgment items yourself, and run another verify only if you changed a lot.
+
+Do not audit the swarm's work file by file. The verify swarm's checks are the audit for routine work; your judgment goes into what you wrote.
+
+## Starting a swarm
+
+Pass `objective`, `acceptance_criteria` with exact commands, `context`, the absolute `workspace`, and `max_agents` (2 or 3 is usually enough). Put everything you already know in `context` now: confirmed facts, constraints, sources the team may cite, validators to reuse, files not to touch. Each fact you hold back becomes a steer later.
+
+Brief and verify swarms work in your checkout. Build swarms work in a worktree on branch `swarm/<id>` in a git repository; merge that branch when its acceptance commands pass. Pass `isolate: false` to have a build swarm write straight into your checkout; give it write scopes that do not overlap yours. The default `permission_mode` is `danger-full-access` because the workspace sandbox breaks native toolchains on Windows.
+
+## While a swarm runs
+
+Call `swarm_status` with `wait_ms` of 300000 to 600000 and `since_finding` set to the `latestId` from your previous call. It blocks until the swarm needs you and says why in `wake`: `plan`, `question`, `failure`, `warnings`, `tool-errors`, `idle`, `stopped`, `failed`, `detached`, or `timeout`. Do not poll and do not sleep between calls.
+
+- `plan`: check the plan against your intent once. This is the cheapest point to correct drift.
+- `question`: answer with one `swarm_steer`.
+- `failure` or `warnings` that change the plan: one `swarm_steer` with the decision.
+- `idle`: call `swarm_result`.
+- Two `timeout` wakes with no task movement: `swarm_inspect` `errors`, then steer or stop.
+
+Never edit files inside a running swarm's write scopes. Missing work becomes `swarm_task_add`, not your own edit.
 
 ## Between stages: start fresh
 
-`swarm_result` writes `handoff.md` in the swarm directory: objective, acceptance criteria, your steers (decisions and confirmed facts), the Lead's summary and verification, open items, and the files to read first. When a stage ends and the next one is a separate piece of work (copy, then design, then release), start the next stage in a new session that reads `handoff.md` and the project's own governing files, not this conversation. A long session re-reads everything it has seen on every turn; a fresh one starts from one page.
+`swarm_result` writes `handoff.md` in the swarm directory: objective, acceptance criteria, your steers (decisions and confirmed facts), the Lead's summary, open items, and the brief path for a brief swarm. When one stage ends and the next is separate work (brief, then writing, then verification; or copy, then design, then release), start the next stage in a new session that reads `handoff.md`, the brief, and the project's governing files. A long session re-reads everything it has seen on every turn; a fresh one starts from a few pages.
 
-Do not skip the audit because the tests are green. Green tests written by the same team that wrote the code prove consistency, not correctness.
+## Refactor swarms
+
+For a large codebase where your own audit produced a numbered list of problems, `swarm_resume` the finished swarm with `mode: "refactor"` and the list as `instruction`. The team resolves each item and accounts for every id. Use this when the fixes are mechanical and many; fix judgment items yourself.
+
+## If a swarm is detached
+
+After a Codex restart, `swarm_list` shows earlier swarms with phase `detached`. Their work on disk and their ledger survive. Call `swarm_resume` with the swarm id and an `instruction` saying what remains; do not start a fresh `swarm_start` for the same objective.
 
 ## Setup and failures
 
-When a tool says setup is needed, or the user asks whether DotSwarm is ready, call `swarm_doctor`. If the runtime is missing, call `swarm_setup`; it installs the pinned DeepSeek Harness into the user's DotSwarm data directory and takes a few minutes. If the key is missing, tell the user the exact key file path from the doctor result and ask them to put `DEEPSEEK_API_KEY=...` in it themselves. Never ask for the key in chat and never write it anywhere. A `failed` phase includes the runtime's stderr tail in `error`.
+When a tool says setup is needed, or the user asks whether DotSwarm is ready, call `swarm_doctor`. If the runtime is missing, call `swarm_setup`; it installs the pinned DeepSeek Harness into the user's DotSwarm data directory. If the key is missing, tell the user the key file path from the doctor result and ask them to put `DEEPSEEK_API_KEY=...` in it themselves. Never ask for the key in chat and never write it anywhere. A `failed` phase includes the runtime's stderr tail in `error`.

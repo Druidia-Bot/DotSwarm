@@ -52,14 +52,14 @@ export function changedFiles(porcelain) {
 }
 
 /** Markdown handoff so the next stage starts from one page instead of a long conversation. */
-export function renderHandoff({ swarmId, spec, phase, report, ledger, openQuestions, steers, files, screens }) {
+export function renderHandoff({ swarmId, spec, phase, report, ledger, openQuestions, steers, files, screens, brief }) {
   const list = (items, empty = 'None') => (items?.length ? items.map((x) => `- ${x}`).join('\n') : empty);
   const section = (name) => report?.[name]?.trim() || 'Not reported.';
   return `# Handoff: ${swarmId}
 
 Phase: ${phase}. Workspace: ${spec.workspace}${spec.branch ? ` (branch ${spec.branch})` : ''}. Mode: ${spec.mode ?? 'build'}${spec.design ? ', design' : ''}.
 
-## Objective
+${brief ? `Brief: ${brief} (read this instead of the sources).\n\n` : ''}## Objective
 ${spec.objective.trim()}
 
 ## Acceptance criteria

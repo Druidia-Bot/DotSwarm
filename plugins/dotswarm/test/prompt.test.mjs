@@ -65,3 +65,19 @@ test('every multi-agent swarm gets a reviewer and the review standard', () => {
     assert.ok(prompt.includes(needle), `lead prompt includes ${needle}`);
   }
 });
+
+test('brief and verify swarms get their own rules and roster', () => {
+  const brief = buildLeadPrompt({ swarmId: 'sw-b', objective: 'Brief the site build', maxAgents: 3, workspace: '/w', mode: 'brief', briefPath: '/d/brief.md', briefWords: 8000, notesDir: '/d/notes' });
+  assert.match(brief, /BRIEF MODE/);
+  assert.match(brief, /at most 8000 words/);
+  assert.match(brief, /\/d\/brief\.md/);
+  assert.match(brief, /Quote verbatim/);
+  assert.doesNotMatch(brief, /QUALITY BAR/);
+  assert.match(suggestedRoles(3, { mode: 'brief' })[1], /^brief-checker:/);
+
+  const verify = buildLeadPrompt({ swarmId: 'sw-v', objective: 'Verify the site', maxAgents: 3, workspace: '/w', mode: 'verify' });
+  assert.match(verify, /VERIFY MODE/);
+  assert.match(verify, /Never change judgment content/);
+  assert.match(verify, /QUALITY BAR/);
+  assert.match(suggestedRoles(3, { mode: 'verify' })[0], /^checker:/);
+});

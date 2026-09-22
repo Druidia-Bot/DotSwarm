@@ -1,6 +1,6 @@
 # DotSwarm
 
-A Codex plugin that turns the model running your session into a foreman. It plans a task and hands it to a team of inexpensive DeepSeek Flash agents running inside the DeepSeek Harness (`dsh`). The team coordinates through the harness's experimental Agent Teams subsystem, a shared task board and durable peer mailbox, plus a shared findings ledger that DotSwarm adds. The coordinator receives compressed state, steers on exceptions, audits the result, sends a refactor team, and does a final sweep. It manages state, not conversation.
+A Codex plugin that keeps the expensive model running your session for the work that needs its judgment. A team of inexpensive DeepSeek Flash agents, running inside the DeepSeek Harness (`dsh`), does the reading and the routine work: a `brief` swarm reads the sources and returns one condensed brief, a `build` swarm does work a spec fully determines, and a `verify` swarm runs every check and fixes mechanical defects so the coordinator never reads the output. The team coordinates through the harness's experimental Agent Teams subsystem, a shared task board and durable peer mailbox, plus a shared findings ledger that DotSwarm adds. The coordinator writes what users read and see and makes the decisions; it receives compressed state, steers on exceptions, and reads only the brief and the escalations.
 
 ```
 Codex session (any model)
@@ -43,7 +43,7 @@ DEEPSEEK_API_KEY=...
 
 | Tool | Purpose |
 |---|---|
-| `swarm_start` | objective, plan (5 to 15 work units), acceptance criteria, context packet, absolute workspace, `max_agents`, `isolate`, `design`, `mode`, model and effort |
+| `swarm_start` | `mode` `brief` (read and condense into `brief.md`), `build` (work a spec fully determines), `verify` (check, fix mechanical defects, escalate judgment), or `refactor`; objective, plan, acceptance criteria, context packet, absolute workspace, `max_agents`, `isolate`, `design`, `brief_words`, model and effort |
 | `swarm_status` | compressed state; `wait_ms` blocks until the swarm needs you (plan, question, failure, warning or tool-error burst, idle/stopped/failed) and `wake` names the reason; `wake_on: "any"` wakes on every change; `since_finding` returns only new ledger entries; lists open questions, filtered tool errors, and a cost line |
 | `swarm_steer` | one instruction to the Lead, delivered as its next turn and immediately as a ledger entry |
 | `swarm_task_add` | hand the Lead a new board task instead of editing the workspace yourself |
@@ -54,7 +54,7 @@ DEEPSEEK_API_KEY=...
 | `swarm_list` | swarms known to this server, including detached ones |
 | `swarm_setup`, `swarm_doctor` | install the runtime into the data directory; report health |
 
-The bundled `swarm` skill tells the coordinator how to use them: plan first, do not touch the workspace while the team runs, steer only on exceptions, verify the report itself, audit every changed file, resume in `refactor` mode with the audit list, then a final sweep. Set `design: true` for anything a person will look at: the team switches to the image-capable `deepseek-flash` model and must render each screen with Playwright at 390x844 and 1440x900, view it with `read_image`, critique it, and iterate at least twice, keeping screenshots outside the repository.
+The bundled `swarm` skill tells the coordinator how to use them: a brief swarm reads for it, it writes the creative and judgment work itself in few large turns, it hands off anything a spec and a command fully pin down, a verify swarm checks the result, and it starts each stage in a fresh session from `handoff.md`. It does not read what the swarm wrote; it reads the brief and the escalations. Set `design: true` for anything a person will look at: the team switches to the image-capable `deepseek-flash` model and must render each screen with Playwright at 390x844 and 1440x900, view it with `read_image`, critique it, and iterate at least twice, keeping screenshots outside the repository.
 
 Isolation is on by default: in a git repository the team works in a worktree under the data directory on branch `swarm/<id>`, and `swarm_result` reports the branch for review and merge. Pass `isolate: false` to work directly in the checkout.
 
@@ -65,14 +65,15 @@ Isolation is on by default: in a git repository the team works in a worktree und
 | Agent loop, tools, sandbox, sessions, task DAG, mailbox, `spawn_teammate`, `wait_agent` | DeepSeek Harness (`@deepseek-ai/dsh`, pinned, installed into the data directory at setup) plus `@deepseek-ai/dsh-experimental-agent-team-profile` |
 | Stdio JSON-RPC client for the harness SDK protocol | `src/dsh-client.mjs` |
 | Swarm lifecycle, event folding, compressed status, persistence, resume, worktrees | `src/swarm.mjs`, `src/swarm-state.mjs` |
-| Lead prompt, worker protocol, design and refactor sections, report format | `src/prompt.mjs` |
+| Lead prompt, worker protocol, review standard, quality bar, brief, verify, design, and refactor sections, report format | `src/prompt.mjs` |
+| Result digest, risky-file list, and `handoff.md` | `src/digest.mjs` |
 | Findings ledger and its MCP server | `src/findings.mjs`, `src/findings-server.mjs` |
 | Minimal MCP stdio server | `src/mcp.mjs` |
 | Profile generation, setup, doctor | `src/profile.mjs`, `src/setup.mjs` |
 
 ## Privacy and cost
 
-The generated harness home disables telemetry, the upstream session-log contributor, and plugin-inventory contributions. Each swarm writes `<data dir>/swarms/<id>/` with the Lead prompt, an `events.jsonl` of every runtime notification, the findings ledger, screenshots, and its state. DeepSeek is charged for every team member; the coordinator pays only for planning, checkpoints, audit, and review, and only if it follows the foreman rule. Set `DOTSWARM_PRICE_INPUT_PER_M` and `DOTSWARM_PRICE_OUTPUT_PER_M` (USD per million tokens) for a dollar estimate in the cost line.
+The generated harness home disables telemetry, the upstream session-log contributor, and plugin-inventory contributions. Each swarm writes `<data dir>/swarms/<id>/` with the Lead prompt, an `events.jsonl` of every runtime notification, the findings ledger, screenshots, and its state. DeepSeek is charged for every team member. The coordinator's cost is set by how many turns it takes times how much it has read, so the skill keeps it to few, large turns: it reads the brief instead of the sources, writes its own part in batches, waits on `swarm_status` instead of polling, and reads only escalations, never the swarm's output. Set `DOTSWARM_PRICE_INPUT_PER_M` and `DOTSWARM_PRICE_OUTPUT_PER_M` (USD per million tokens) for a dollar estimate in the cost line.
 
 ## Development
 
