@@ -41,7 +41,7 @@ DEEPSEEK_API_KEY=...
 
 ## Updating
 
-Codex keeps its own copy of the plugin, so new releases do not arrive on their own. With the Codex CLI:
+Codex keeps its own copy of the plugin, so new releases do not arrive on their own. Close every Codex window and session first; a running one holds the old copy open and the install reports `Access is denied`. Then, with the Codex CLI:
 
 ```sh
 codex plugin marketplace upgrade dotswarm
