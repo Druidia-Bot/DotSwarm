@@ -1,6 +1,6 @@
 {
   "name": "dotswarm",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "description": "Codex plugin: the coordinating model plans and supervises, a DeepSeek Harness Agent Team of Flash workers does the work",

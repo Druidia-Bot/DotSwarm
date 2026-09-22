@@ -7,11 +7,16 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { ROOT } from '../src/config.mjs';
 
-test('the Codex plugin launcher starts the MCP server and exposes the swarm tools', async () => {
+test('the Codex plugin launcher starts the MCP server, installs the subagents, and exposes the swarm tools', async () => {
+  const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-server-home-'));
   const transport = new StdioClientTransport({
     command: process.execPath,
     args: [path.join(ROOT, 'server.mjs')],
-    env: { ...process.env, DOTSWARM_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-server-test-')) },
+    env: {
+      ...process.env,
+      DOTSWARM_HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-server-test-')),
+      CODEX_HOME: codexHome,
+    },
   });
   const client = new Client({ name: 'test', version: '0' });
   await client.connect(transport);
@@ -28,5 +33,8 @@ test('the Codex plugin launcher starts the MCP server and exposes the swarm tool
   const missing = await client.callTool({ name: 'swarm_status', arguments: { swarm_id: 'nope' } });
   assert.equal(missing.isError, true);
   assert.match(missing.content[0].text, /unknown swarm nope/);
+  // Starting the server is enough to get the subagents; swarm_setup is only for the DeepSeek side.
+  assert.deepEqual(fs.readdirSync(path.join(codexHome, 'agents')).sort(),
+    ['dotswarm-designer.toml', 'dotswarm-imager.toml', 'dotswarm-writer.toml']);
   await client.close();
 });

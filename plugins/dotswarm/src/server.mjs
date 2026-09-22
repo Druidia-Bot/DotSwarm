@@ -4,6 +4,7 @@
 import { DEFAULTS, VERSION, deepseekKeySource, dshInstalled, keyFile } from './config.mjs';
 import { serveStdio } from './mcp.mjs';
 import { runDoctor, runSetup } from './setup.mjs';
+import { installAgents } from './agents.mjs';
 import { SwarmManager } from './swarm.mjs';
 
 const manager = new SwarmManager();
@@ -226,11 +227,18 @@ async function shutdown() {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
+// The subagents are plain Codex agents: no key, no network, no harness. Install them on start so
+// every install has them, whether or not the DeepSeek side is ever set up. A file whose managed-by
+// marker the user removed is theirs and is left alone.
+try {
+  installAgents();
+} catch { /* a read-only or unusual Codex home must not stop the server */ }
+
 serveStdio({
   name: 'dotswarm',
   version: VERSION,
   tools: TOOLS,
   call,
   onClose: shutdown,
-  instructions: 'DotSwarm runs DeepSeek Flash agent teams so your tokens go to judgment, not reading or routine work. Use mode brief to have the team read sources and return one brief, build for work a spec and a command fully determine, and verify to check finished work and fix mechanical defects. Write what users read or see and make the decisions yourself. Do not read what the swarm wrote: read the brief, openQuestions, ownerQuestions, and ledger.open. The team cannot generate raster images; generate them yourself from the prompts it writes. Wait with swarm_status wait_ms 300000 to 600000; never poll. If a tool says setup is needed, call swarm_setup, then swarm_doctor.',
+  instructions: 'DotSwarm runs DeepSeek Flash agent teams so your tokens go to judgment, not reading or routine work. Use mode brief to have the team read sources and return one brief, build for work a spec and a command fully determine, and verify to check finished work and fix mechanical defects. Write what users read or see and make the decisions yourself. Do not read what the swarm wrote: read the brief, openQuestions, ownerQuestions, and ledger.open. The team cannot generate raster images: hand the image specification to the dotswarm-imager subagent. Taste work goes to dotswarm-designer, prose that has to persuade to dotswarm-writer; all three are installed for you and need no DeepSeek key. Wait with swarm_status wait_ms 300000 to 600000; never poll. If a tool says setup is needed, call swarm_setup, then swarm_doctor.',
 });

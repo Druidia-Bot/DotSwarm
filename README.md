@@ -38,14 +38,16 @@ On macOS or Linux:
 curl -fsSL https://raw.githubusercontent.com/Druidia-Bot/DotSwarm/main/install-codex.sh | sh
 ```
 
-Then, in a fresh Codex session, ask it to check that DotSwarm is set up. The `swarm_setup` tool installs the pinned DeepSeek Harness and Agent Teams bundle into your local DotSwarm data directory (`%LOCALAPPDATA%\DotSwarm` on Windows, `~/.dotswarm` elsewhere; override with `DOTSWARM_HOME`). Put your key in the file it names:
+That is all the subagents need: they install themselves into `~/.codex/agents` the first time the plugin's server starts, and work with no key and no further setup.
+
+Swarms need the DeepSeek side. In a fresh Codex session, ask it to set DotSwarm up. The `swarm_setup` tool installs the pinned DeepSeek Harness and Agent Teams bundle into your local DotSwarm data directory (`%LOCALAPPDATA%\DotSwarm` on Windows, `~/.dotswarm` elsewhere; override with `DOTSWARM_HOME`) and checks for your key. Put your key in the file it names:
 
 ```
 <data dir>/dsh-home/.env
 DEEPSEEK_API_KEY=...
 ```
 
-`swarm_doctor` confirms everything. Claude Code users can add the same repository as a marketplace; the plugin manifest for it is included.
+`swarm_doctor` confirms everything, including which subagents are installed. Claude Code users can add the same repository as a marketplace; the plugin manifest for it is included.
 
 ## Updating
 
