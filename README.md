@@ -97,8 +97,8 @@ A swarm is cheap and thorough, but it cannot generate images and its taste is we
 | Agent | Model | For |
 |---|---|---|
 | `dotswarm-designer` | `gpt-6-astra` | visual direction, design systems, logo and brand, the first instance of each page or screen type, judging finished screens |
-| `dotswarm-imager` | `gpt-5.6-terra` | generating raster images from a written specification |
-| `dotswarm-writer` | `gpt-5.6-sol` | prose people read where voice and persuasion matter |
+| `dotswarm-imager` | `gpt-6-luna` | generating raster images from a written specification |
+| `dotswarm-writer` | `gpt-6-sol` | prose people read where voice and persuasion matter |
 
 Each starts with about half the usual context (memories, plugins, app guidance and the skills catalog are off: measured 22.2k to 11.5k tokens per turn) and returns paths and a summary, never content. Edit them freely: remove the `# managed-by: dotswarm` line from a file and setup will leave it alone. Change the `model` lines if your account has different models.
 

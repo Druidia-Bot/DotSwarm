@@ -1,7 +1,7 @@
 # managed-by: dotswarm. swarm_setup keeps this file current; remove this line to keep your own edits.
 name = "dotswarm-imager"
 description = "Generates raster images from written specifications, which a DeepSeek swarm cannot do. Give it the path of the image specification file; it saves each image where the specification says."
-model = "gpt-5.6-terra"
+model = "gpt-6-luna"
 model_reasoning_effort = "low"
 sandbox_mode = "workspace-write"
 developer_instructions = """
