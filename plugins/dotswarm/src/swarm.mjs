@@ -298,9 +298,11 @@ export class Swarm {
     }
     const failed = [];
     for (const miss of outcome.failed) {
-      const previous = requests.find((r) => r.id === miss.id)?.previous;
+      // The same skill may serve several work units; match the unit too so each keeps its own.
+      const request = requests.find((r) => r.id === miss.id && (r.unit ?? null) === (miss.unit ?? null))
+        ?? requests.find((r) => r.id === miss.id);
+      const previous = request?.previous;
       if (previous?.path && fs.existsSync(path.join(previous.path, 'SKILL.md'))) {
-        const request = requests.find((r) => r.id === miss.id);
         outcome.loaded.push({
           id: miss.id, version: previous.version ?? null, contentHash: request.contentHash, keyId: previous.keyId ?? null,
           path: previous.path, unit: request.unit ?? null, idempotencyKey: request.idempotencyKey, reused: true,

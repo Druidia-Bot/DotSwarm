@@ -115,3 +115,24 @@ test('without DotBot, resume falls back to the previous verified copy, and skill
   assert.equal(plain.skills, null);
   assert.doesNotMatch(fs.readFileSync(path.join(plain.dir, 'lead-prompt.md'), 'utf8'), /SKILLS ASSIGNED/);
 });
+
+test('one skill serving two work units keeps each unit when resume falls back to the previous copy', async (t) => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-dotbot-ws-'));
+  const withDotbot = new SwarmManager({ launch, dotbot });
+  t.after(() => withDotbot.shutdownAll());
+  const first = await withDotbot.start({
+    objective: 'Greet', workspace,
+    skills: [{ id: 'fixture-alpha', work_unit: 'greet in English' }, { id: 'fixture-alpha', work_unit: 'greet in French' }],
+  });
+  assert.deepEqual(first.skills.loaded.map((s) => s.unit), ['greet in English', 'greet in French']);
+  await settle(first);
+  await first.stop();
+
+  const offline = new SwarmManager({ launch });
+  t.after(() => offline.shutdownAll());
+  const resumed = await offline.resume(first.id);
+  assert.deepEqual(resumed.skills.loaded.map((s) => [s.unit, s.reused]), [['greet in English', true], ['greet in French', true]]);
+  const prompt = fs.readFileSync(path.join(resumed.dir, 'lead-prompt.md'), 'utf8');
+  assert.match(prompt, /- greet in English: .*fixture-alpha\/SKILL\.md/);
+  assert.match(prompt, /- greet in French: .*fixture-alpha\/SKILL\.md/);
+});
