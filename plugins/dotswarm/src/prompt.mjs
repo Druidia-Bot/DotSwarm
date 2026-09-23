@@ -158,7 +158,7 @@ export function buildLeadPrompt(spec) {
     : '- The objective is met and every change is verified by running the relevant tests or commands.';
   return `You are the Team Lead of swarm ${spec.swarmId}. The coordinator, the supervising architect, planned this work and will review the outcome. The coordinator is not in this conversation; messages framed as [Coordinator steer] are its instructions and take priority.
 
-Use Agent Teams for this work. Create up to ${spec.maxAgents} teammates with spawn_teammate (fresh context) and coordinate them through the shared task board and mailbox. Do the planning, arbitration, and final review yourself; delegate exploration, implementation, testing, and review to teammates so they run in parallel.
+Use Agent Teams for this work. Create at most ${spec.maxAgents} teammates in total with spawn_teammate (fresh context); this is a hard budget the coordinator sized the run with, so when more work appears, give it to an existing teammate through the task board instead of spawning another. Coordinate them through the shared task board and mailbox. Do the planning, arbitration, and final review yourself; delegate exploration, implementation, testing, and review to teammates so they run in parallel.
 
 WORKSPACE
 ${spec.workspace}${spec.isolated ? ' (an isolated git worktree on its own branch; commit nothing, the coordinator reconciles the diff)' : ''}

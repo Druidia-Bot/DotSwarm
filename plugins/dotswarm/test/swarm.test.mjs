@@ -44,6 +44,10 @@ test('start, observe, steer, result, stop against the fake runtime', async (t) =
   assert.equal(status.cost.swarmTokens.input, 600);
   assert.equal(status.cost.byMember.worker.input, 100);
   assert.equal(status.cost.estimatedUsd, undefined);
+  assert.equal(status.teammatesOverBudget, undefined);
+  swarm.spec.maxAgents = 0;
+  assert.deepEqual(swarm.status().teammatesOverBudget, { budget: 0, spawned: 1 }, 'a Lead past its teammate budget is reported');
+  swarm.spec.maxAgents = 2;
   assert.deepEqual(status.openQuestions, []);
   swarm.findings.append({ author: 'lead', type: 'question', scope: 'coordinator', message: 'may I edit wrangler.jsonc?' });
   assert.equal(swarm.status().openQuestions[0].message, 'may I edit wrangler.jsonc?');
@@ -92,6 +96,30 @@ test('a runtime that dies during start reports failed with stderr', async () => 
   assert.equal(manager.list().find((s) => s.workspace === workspace).phase, 'failed');
 });
 
+test('a Lead turn that ends in a provider error reports the error and wakes failed, and a steer retries', async (t) => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-ws-'));
+  const manager = new SwarmManager({ launch: fakeLaunch('turn-error') });
+  t.after(() => manager.shutdownAll());
+  const swarm = await manager.start({ objective: 'x', workspace, max_agents: 1 });
+  assert.equal(await swarm.waitForAttention(5000), 'failed');
+  // The wake comes on turn/end; the session reports idle just after it.
+  const idleBy = Date.now() + 5000;
+  while (swarm.phase !== 'idle' && Date.now() < idleBy) await swarm.waitForChange(500);
+  const status = swarm.status();
+  assert.equal(status.phase, 'idle');
+  assert.equal(status.error, 'Lead turn 1 ended in an error: DeepSeek API error (HTTP 400) (INVALID_REQUEST, 400, request req-1)');
+  const result = await swarm.result();
+  assert.equal(result.complete, false);
+  assert.match(result.error, /HTTP 400/);
+
+  // The runtime is still up: a steer starts a new Lead turn, which clears the error when it succeeds.
+  await swarm.steer('the model is fixed; start again');
+  const deadline = Date.now() + 5000;
+  while ((swarm.phase !== 'idle' || swarm.problem) && Date.now() < deadline) await swarm.waitForChange(500);
+  assert.equal(swarm.status().error, undefined);
+  assert.equal((await swarm.result()).complete, true);
+});
+
 function tempGitRepo() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dotswarm-repo-'));
   const run = (args) => execFileSync('git', args, { cwd: dir, windowsHide: true, stdio: 'pipe' });
@@ -128,7 +156,22 @@ test('isolation defaults to a worktree for git repos, and swarms persist, detach
   const later = new SwarmManager({ launch: fakeLaunch('normal') });
   t.after(() => later.shutdownAll());
   assert.equal(later.get(first.id).phase, 'stopped');
-  // ...and a swarm whose owner died mid-run as detached, replayed from its log.
+  assert.equal(saved.owner.pid, process.pid, 'state.json records the owning server process');
+  // ...a swarm another live server process owns as owned-elsewhere, which cannot be resumed here...
+  const liveOwner = { pid: process.ppid, heartbeatAt: new Date().toISOString() };
+  fs.writeFileSync(path.join(first.dir, 'state.json'), JSON.stringify({ ...saved, phase: 'running', owner: liveOwner }));
+  const second = new SwarmManager({ launch: fakeLaunch('normal') });
+  t.after(() => second.shutdownAll());
+  assert.equal(second.list().find((s) => s.swarmId === first.id).phase, 'owned-elsewhere');
+  assert.match(second.get(first.id).status().ownedElsewhere, new RegExp(`pid ${process.ppid}`));
+  await assert.rejects(second.resume(first.id), /still running in another DotSwarm server process/);
+  await assert.rejects(second.get(first.id).steer('x'), /another DotSwarm server process/);
+  // ...and reads it as detached once that owner's heartbeat goes stale.
+  const stale = new Date(Date.now() - 10 * 60_000).toISOString();
+  fs.writeFileSync(path.join(first.dir, 'state.json'), JSON.stringify({ ...saved, phase: 'running', owner: { ...liveOwner, heartbeatAt: stale } }));
+  assert.equal(second.get(first.id).phase, 'detached');
+  // A swarm whose owner died mid-run is detached, replayed from its log. Our own pid in the
+  // record means a previous process that happened to have it, so it reads as gone too.
   fs.writeFileSync(path.join(first.dir, 'state.json'), JSON.stringify({ ...saved, phase: 'running' }));
   const crashed = new SwarmManager({ launch: fakeLaunch('normal') });
   t.after(() => crashed.shutdownAll());
@@ -199,6 +242,7 @@ test('attentionReason holds routine progress and wakes on what needs the coordin
   assert.equal(attentionReason({ ...base, phase: 'idle' }), 'idle');
   assert.equal(attentionReason({ ...base, phase: 'stopped' }), 'stopped');
   assert.equal(attentionReason({ ...base, phase: 'detached' }), 'detached');
+  assert.equal(attentionReason({ ...base, phase: 'owned-elsewhere' }), 'owned-elsewhere');
   assert.equal(attentionReason({ ...base, error: 'runtime exited' }), 'failed');
 });
 

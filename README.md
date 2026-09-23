@@ -71,8 +71,8 @@ Then start a new Codex session (open sessions keep the old version) and ask it t
 | `swarm_inspect` | drill into `tasks`, `findings`, `roster`, `mail`, `errors`, `lead`, `member:<name>`, `events`, `prompts` |
 | `swarm_result` | the Lead's report split into Summary, Changes, Verification, Unresolved, Handoff; `ledger.open` (warnings and failures nobody answered); `readFirst` (changed gates, scripts, config, schema, forms, auth); `git diff --stat`; `ownerQuestions` (every question for the owner at an approval gate, numbered and complete); and writes `handoff.md` so the next stage can start in a fresh session |
 | `swarm_stop` | shut the runtime down; workspace changes stay |
-| `swarm_resume` | continue a detached or finished swarm on the same worktree, seeded with the old board, the whole ledger, and the last report |
-| `swarm_list` | swarms known to this server, including detached ones |
+| `swarm_resume` | continue a detached or finished swarm on the same worktree, seeded with the old board, the whole ledger, and the last report; refuses a swarm another live server process still owns |
+| `swarm_list` | swarms known to this server, including detached ones and `owned-elsewhere` ones still running in another server process |
 | `swarm_setup`, `swarm_doctor` | install the runtime into the data directory; report health |
 
 The bundled `swarm` skill tells the coordinator how to use them: a brief swarm reads for it, it writes the creative and judgment work itself in few large turns, it hands off anything a spec and a command fully pin down, a verify swarm checks the result, and it starts each stage in a fresh session from `handoff.md`. It does not read what the swarm wrote; it reads the brief and the escalations. Set `design: true` for anything a person will look at: the team switches to the image-capable `deepseek-flash` model and must render each screen with Playwright at 390x844 and 1440x900, view it with `read_image`, critique it, and iterate at least twice, keeping screenshots outside the repository.

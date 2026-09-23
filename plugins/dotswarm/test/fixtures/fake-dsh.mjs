@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // A fake dsh SDK runtime speaking the documented protocol over stdio. Modes via
-// FAKE_DSH_MODE: normal | exit-early | hang-shutdown | reject-initialize.
+// FAKE_DSH_MODE: normal | exit-early | hang-shutdown | reject-initialize | turn-error.
 import readline from 'node:readline';
 
 const mode = process.env.FAKE_DSH_MODE ?? 'normal';
@@ -21,6 +21,14 @@ function runTurn(sessionId, messageId, text) {
   event(sessionId, 'agent/inbox/spliced', { inserted: [{ id: messageId }] });
   notify('session.status', { sessionId, status: 'running' });
   event(sessionId, 'user/message', { id: messageId, role: 'user', content: [{ type: 'text', text }], source: { kind: 'user' } });
+  if (mode === 'turn-error' && promptCount === 1) {
+    // The provider rejects the Lead's first request; the runtime stays up and the session goes idle.
+    const failure = { message: 'DeepSeek API error (HTTP 400)', code: 'INVALID_REQUEST', status: 400, requestId: 'req-1' };
+    event(sessionId, 'assistant/attempt', { turn: 1, step: 1, finishReason: { kind: 'error' }, failure });
+    event(sessionId, 'turn/end', { turn: 1, reason: { kind: 'error', error: failure } });
+    notify('session.status', { sessionId, status: 'idle' });
+    return;
+  }
   const teammate = 'sess-worker-1';
   if (promptCount === 1) {
     event(sessionId, 'team/task', { version: 2, teamId: sessionId, task: { id: 'task-1', revision: 1, subject: 'Explore', description: 'look', status: 'pending', blockedBy: [], writeScopes: [] } });
