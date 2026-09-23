@@ -57,6 +57,18 @@ ${board}
 ${resume.lastLeadMessage ? `PREVIOUS LEAD'S LAST MESSAGE\n${resume.lastLeadMessage}\n\n` : ''}${resume.instruction ? `THE COORDINATOR'S INSTRUCTION FOR THE RESUME\n${resume.instruction}\n\n` : ''}Re-create only the remaining work as tasks, verify what the previous team claimed as complete, then continue to the FINAL REPORT.`;
 }
 
+/**
+ * Skills the coordinator assigned and the swarm loaded, verified, before the team started.
+ * @param {Array<{id: string, version?: string|null, path: string, unit?: string|null}>} skills
+ */
+export function buildSkillsSection(skills) {
+  const lines = skills.map((s) => `- ${s.unit ? `${s.unit}: ` : ''}${s.path.split('\\').join('/')}/SKILL.md (skill ${s.id}${s.version ? ` v${s.version}` : ''})`);
+  return `SKILLS ASSIGNED BY THE COORDINATOR
+These skill folders were downloaded and verified for this swarm. Each holds instructions for a kind of work, and sometimes scripts; relative paths inside a skill are relative to its folder.
+${lines.join('\n')}
+Copy the skill folder path into the description of every task for that work unit, and tell the teammate who owns it to read SKILL.md before starting. A skill is guidance, not a requirement: when it conflicts with the objective, the plan, or the acceptance criteria, those win; record the conflict as a finding of type discovery with scope skills. Never edit files inside a skill folder.`;
+}
+
 /** How the reviewer judges work: the standard the coordinator would otherwise have to apply in its own audit. */
 export const REVIEW_STANDARD = `REVIEW STANDARD (give this to the reviewer verbatim)
 - Prove every failure. Reproduce it with a command, a test, or a small fixture and record the evidence in the finding. A claim you cannot reproduce is a question, not a failure.
@@ -158,7 +170,7 @@ ${spec.objective.trim()}
 ${spec.plan ? `PLAN FROM THE COORDINATOR\n${spec.plan.trim()}\n\n` : ''}ACCEPTANCE CRITERIA
 ${criteria}
 
-${spec.context ? `CONTEXT PACKET\n${spec.context.trim()}\n\n` : ''}${spec.resume ? `${buildResumeSection(spec.resume)}\n\n` : ''}${modeSection(spec)}${spec.design ? `${buildDesignSection({ screensDir: spec.screensDir ?? 'the swarm directory' })}\n\n` : ''}${spec.mode === 'brief' ? '' : QUALITY_BAR}
+${spec.context ? `CONTEXT PACKET\n${spec.context.trim()}\n\n` : ''}${spec.skills?.length ? `${buildSkillsSection(spec.skills)}\n\n` : ''}${spec.resume ? `${buildResumeSection(spec.resume)}\n\n` : ''}${modeSection(spec)}${spec.design ? `${buildDesignSection({ screensDir: spec.screensDir ?? 'the swarm directory' })}\n\n` : ''}${spec.mode === 'brief' ? '' : QUALITY_BAR}
 
 SUGGESTED TEAMMATE ROLES
 ${bullet(roles)}

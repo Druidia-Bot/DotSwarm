@@ -6,6 +6,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { BENIGN_TOOL_ERRORS, DEFAULTS, PROFILE_NAME, dshBin, dshEnv, findingsServerPath, swarmsDir, toPosix, tokenPrices, workDir } from './config.mjs';
 import { changedFiles, ledgerDigest, renderHandoff } from './digest.mjs';
+import { parseSkillRequests } from './dotbot.mjs';
 import { DshClient } from './dsh-client.mjs';
 import { Findings } from './findings.mjs';
 import { buildLeadPrompt, buildSteerPrompt, parseReport } from './prompt.mjs';
@@ -111,8 +112,11 @@ export function attentionReason({ phase, error, newFindings, openQuestionIds, kn
 }
 
 export class Swarm {
-  constructor(spec, { launch } = {}) {
+  constructor(spec, { launch, dotbot } = {}) {
     this.id = spec.swarmId;
+    // Optional DotBot connection (see dotbot.mjs); null means skills are never loaded.
+    this.dotbot = dotbot ?? null;
+    this.skills = null;
     this.spec = spec;
     this.dir = path.join(swarmsDir(), this.id);
     this.rootSessionId = `swarm-${this.id}`;
@@ -196,6 +200,7 @@ export class Swarm {
         fs.copyFileSync(this.spec.resume.findingsFile, this.findings.file);
       }
       if (this.spec.isolate) await this.#createWorktree();
+      await this.#loadSkills();
       this.persist();
       const patchFile = path.join(this.dir, 'swarm.patch.yml');
       fs.writeFileSync(patchFile, swarmPatch({ findingsFile: this.findings.file, swarmId: this.id }));
@@ -268,6 +273,56 @@ export class Swarm {
     this.branch = `swarm/${this.id}`;
     await git(this.spec.workspace, ['worktree', 'add', '-b', this.branch, worktree, 'HEAD']);
     this.workspace = worktree;
+  }
+
+  /**
+   * Load the skills the coordinator assigned into <swarm dir>/skills through DotBot, verified
+   * before anything is written, and record each id and content hash in the ledger. On resume a
+   * skill is fetched again by content hash; if that fails, the previous swarm's verified copy is
+   * reused when it is still on disk. Anything else that fails is noted and the work proceeds
+   * without that skill.
+   */
+  async #loadSkills() {
+    const requests = this.spec.skillRequests ?? [];
+    if (!requests.length) return;
+    const dir = path.join(this.dir, 'skills');
+    let outcome;
+    if (this.dotbot) {
+      try {
+        outcome = await this.dotbot.loadSkills(requests, { dir, idempotencyPrefix: `dotswarm:${this.id}` });
+      } catch (error) {
+        outcome = { loaded: [], failed: requests.map((r) => ({ id: r.id, unit: r.unit ?? null, reason: error.message })) };
+      }
+    } else {
+      outcome = { loaded: [], failed: requests.map((r) => ({ id: r.id, unit: r.unit ?? null, reason: 'DotBot is not configured' })) };
+    }
+    const failed = [];
+    for (const miss of outcome.failed) {
+      const previous = requests.find((r) => r.id === miss.id)?.previous;
+      if (previous?.path && fs.existsSync(path.join(previous.path, 'SKILL.md'))) {
+        const request = requests.find((r) => r.id === miss.id);
+        outcome.loaded.push({
+          id: miss.id, version: previous.version ?? null, contentHash: request.contentHash, keyId: previous.keyId ?? null,
+          path: previous.path, unit: request.unit ?? null, idempotencyKey: request.idempotencyKey, reused: true,
+        });
+      } else {
+        failed.push(miss);
+      }
+    }
+    this.skills = { loaded: outcome.loaded, failed };
+    this.spec.skills = outcome.loaded;
+    for (const s of outcome.loaded) {
+      this.findings.append({
+        author: 'dotbot', type: 'decision', scope: 'skills',
+        message: `Skill ${s.id}${s.version ? ` v${s.version}` : ''} (content hash ${s.contentHash}) ${s.reused ? 're-used from the previous swarm' : 'loaded and verified'} at ${toPosix(s.path)}${s.unit ? ` for work unit: ${s.unit}` : ''}. Whoever works on that unit reads its SKILL.md first.`,
+      });
+    }
+    for (const f of failed) {
+      this.findings.append({
+        author: 'dotbot', type: 'discovery', scope: 'skills',
+        message: `Skill ${f.id} was not loaded (${f.reason}); ${f.unit ? `work unit "${f.unit}" proceeds` : 'the work proceeds'} without it.`,
+      });
+    }
   }
 
   /** Where a brief swarm writes its brief: outside the workspace, next to the ledger. */
@@ -559,6 +614,7 @@ export class Swarm {
       handoff: toPosix(handoffPath),
       ...(this.spec.mode === 'brief' ? { brief: this.#briefInfo() } : {}),
       tasks: this.state.taskCounts(),
+      ...(this.spec.skills?.length ? { skills: this.spec.skills.map((s) => `${s.id}@${s.contentHash.slice(0, 12)} ${toPosix(s.path)}`) } : {}),
       cost: this.cost(),
       elapsedSeconds: this.elapsedSeconds(),
       ...(gitInfo ? { git: gitInfo } : {}),
@@ -581,9 +637,11 @@ export function defaultLaunch({ swarm, patchFile }) {
 }
 
 export class SwarmManager {
-  constructor({ launch } = {}) {
+  constructor({ launch, dotbot } = {}) {
     this.swarms = new Map();
     this.launch = launch;
+    /** Optional DotBot connection; the server sets it once connectDotbot resolves. */
+    this.dotbot = dotbot ?? null;
     this.loadDetached();
   }
 
@@ -613,7 +671,10 @@ export class SwarmManager {
     const design = Boolean(input.design);
     // A design swarm must see its screenshots; the default model is text-only.
     const model = input.model ? String(input.model) : (design ? DEFAULTS.visionModel : DEFAULTS.model);
+    // Skills only mean something when DotBot is connected; otherwise the argument is ignored.
+    const skillRequests = this.dotbot ? parseSkillRequests(input.skills) : [];
     return {
+      ...(skillRequests.length ? { skillRequests } : {}),
       swarmId: newId(),
       design,
       mode,
@@ -636,7 +697,7 @@ export class SwarmManager {
 
   async start(input) {
     const spec = this.normalizeSpec(input);
-    const swarm = new Swarm(spec, { launch: this.launch });
+    const swarm = new Swarm(spec, { launch: this.launch, dotbot: this.dotbot });
     this.swarms.set(swarm.id, swarm);
     await swarm.start();
     return swarm;
@@ -652,8 +713,16 @@ export class SwarmManager {
     const previous = this.get(id);
     if (previous.alive) throw new Error(`swarm ${id} is still running; steer it instead of resuming`);
     const nextDesign = design === undefined ? Boolean(previous.spec.design) : Boolean(design);
+    // Skills the previous swarm loaded are fetched again by content hash, with the same
+    // idempotency key so the same version is not charged twice.
+    const { skills: previousSkills, skillRequests: _unused, ...previousSpec } = previous.spec;
+    const skillRequests = (previousSkills ?? []).map((s) => ({
+      id: s.id, contentHash: s.contentHash, ...(s.unit ? { unit: s.unit } : {}), idempotencyKey: s.idempotencyKey,
+      previous: { path: s.path, version: s.version, keyId: s.keyId },
+    }));
     const spec = {
-      ...previous.spec,
+      ...previousSpec,
+      ...(skillRequests.length ? { skillRequests } : {}),
       swarmId: newId(),
       // The previous worktree (or plain workspace) already holds the work; never create another.
       workspace: previous.workspace,
@@ -664,7 +733,7 @@ export class SwarmManager {
       model: nextDesign && previous.spec.model === DEFAULTS.model ? DEFAULTS.visionModel : previous.spec.model,
       resume: { ...previous.resumePacket(instruction), findingsFile: previous.findings.file },
     };
-    const swarm = new Swarm(spec, { launch: this.launch });
+    const swarm = new Swarm(spec, { launch: this.launch, dotbot: this.dotbot });
     swarm.branch = previous.branch;
     this.swarms.set(swarm.id, swarm);
     await swarm.start();

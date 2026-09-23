@@ -79,6 +79,17 @@ The bundled `swarm` skill tells the coordinator how to use them: a brief swarm r
 
 Isolation is on by default: in a git repository the team works in a worktree under the data directory on branch `swarm/<id>`, and `swarm_result` reports the branch for review and merge. Pass `isolate: false` to work directly in the checkout.
 
+### Optional: DotBot skills
+
+DotSwarm works fully on its own. When the DotBot client is installed and a DotBot key is configured, the coordinator also gets vetted, signed skills for the team:
+
+- `swarm_find_skills` searches the DotBot catalog once per work unit while the coordinator plans, and `swarm_start` accepts `skills: [{ id, work_unit, content_hash }]`.
+- Each assigned skill is downloaded and verified by the DotBot client into the swarm's directory (`<data dir>/swarms/<id>/skills/`, never the workspace), its id and content hash are recorded in the findings ledger, and the Lead is told to put the skill folder in the description of every task for that work unit.
+- `swarm_resume` fetches the same versions again by content hash; if that fails, it reuses the previous swarm's verified copy when it is still on disk.
+- Anything that goes wrong (no client, no key, network, a slow search, a skill that fails verification) is noted and the swarm runs exactly as it would without DotBot. `swarm_doctor` reports whether DotBot is connected and, if not, why.
+
+DotSwarm ships none of DotBot's code. It looks for the client library at `DOTSWARM_DOTBOT_CLIENT` (the client folder or its `index.mjs`), then at a `dotbot` plugin beside this one in the same marketplace, and reads the key the way the client does (`DOTBOT_API_KEY` or the client's config file).
+
 ## Subagents: taste and images
 
 A swarm is cheap and thorough, but it cannot generate images and its taste is weaker than a frontier model's. `swarm_setup` installs three lean Codex subagents in your Codex home (`~/.codex/agents`) to cover that:

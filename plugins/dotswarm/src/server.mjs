@@ -6,8 +6,13 @@ import { serveStdio } from './mcp.mjs';
 import { runDoctor, runSetup } from './setup.mjs';
 import { installAgents } from './agents.mjs';
 import { SwarmManager } from './swarm.mjs';
+import { DOTBOT_LIMITS, connectDotbot } from './dotbot.mjs';
 
-const manager = new SwarmManager();
+// DotBot is optional. Without its client and a key this is null and every tool behaves exactly
+// as it does without DotBot; the reason is reported by swarm_doctor.
+let dotbotSkipReason = null;
+const dotbot = await connectDotbot({ onSkip: (reason) => { dotbotSkipReason = reason; } });
+const manager = new SwarmManager({ dotbot });
 
 const TOOLS = [
   {
@@ -151,6 +156,49 @@ const TOOLS = [
   },
 ];
 
+// With DotBot connected: one search tool for planning, and a skills argument on swarm_start.
+if (dotbot) {
+  TOOLS.find((t) => t.name === 'swarm_start').inputSchema.properties.skills = {
+    type: 'array',
+    maxItems: DOTBOT_LIMITS.maxSkills,
+    description: 'Skills from swarm_find_skills to load for the team, one entry per work unit that should use one. Each is downloaded and verified into the swarm directory before the team starts, recorded in the findings ledger, and handed to the Lead to put in task descriptions. A skill that fails to load is noted and the work proceeds without it.',
+    items: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id'],
+      properties: {
+        id: { type: 'string', description: 'Skill id from swarm_find_skills.' },
+        work_unit: { type: 'string', description: 'The work unit from your plan this skill is for.' },
+        content_hash: { type: 'string', description: 'Pin the exact version swarm_find_skills returned.' },
+      },
+    },
+  };
+  TOOLS.splice(1, 0, {
+    name: 'swarm_find_skills',
+    description: 'Search the DotBot skill catalog once per work unit while you plan a swarm. Pass the work units of your plan as short task descriptions naming the tools involved; each returns up to three ranked skills with id, score, content hash, and when not to use it. Pass the ones worth using to swarm_start as skills. Searching is free; loading a skill uses DotBot credits.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['work_units'],
+      properties: {
+        work_units: { type: 'array', items: { type: 'string' }, minItems: 1, maxItems: DOTBOT_LIMITS.maxUnits, description: 'One sentence per work unit.' },
+      },
+    },
+  });
+}
+
+/** What the swarm loaded through DotBot, for the start and resume results; empty without skills. */
+function skillsSummary(swarm) {
+  if (!swarm.skills) return {};
+  const { loaded, failed } = swarm.skills;
+  return {
+    skills: {
+      loaded: loaded.map((s) => `${s.id}${s.version ? ` v${s.version}` : ''} -> ${s.path}${s.reused ? ' (previous copy)' : ''}`),
+      ...(failed.length ? { notLoaded: failed.map((f) => `${f.id}: ${f.reason}`) } : {}),
+    },
+  };
+}
+
 function setupHint(reason) {
   return `${reason} Call swarm_setup to install the runtime, then ask the user to put DEEPSEEK_API_KEY=... in ${keyFile()}. swarm_doctor reports the state.`;
 }
@@ -170,6 +218,7 @@ async function call(name, args) {
       const swarm = await manager.start(args);
       return {
         swarmId: swarm.id, phase: swarm.phase, workspace: swarm.workspace, branch: swarm.branch, mode: swarm.spec.mode, design: swarm.spec.design, model: swarm.spec.model,
+        ...skillsSummary(swarm),
         ...(swarm.spec.mode === 'brief' ? { brief: swarm.briefPath } : {}),
         hint: swarm.spec.mode === 'brief'
           ? 'Your next call is swarm_result with wait_ms 600000; it returns the finished brief inline. Until then do not read the sources, skill references, or planning files the brief covers, and do not start writing work that depends on them; reading them now pays for the same material twice. If it returns before the brief is done, call it again.'
@@ -204,12 +253,21 @@ async function call(name, args) {
     case 'swarm_resume': {
       if (!dshInstalled()) throw new Error(setupHint('DeepSeek Harness is not installed.'));
       const swarm = await manager.resume(args.swarm_id, { instruction: args.instruction, maxAgents: args.max_agents, mode: args.mode, design: args.design });
-      return { swarmId: swarm.id, resumedFrom: args.swarm_id, phase: swarm.phase, workspace: swarm.workspace, branch: swarm.branch };
+      return { swarmId: swarm.id, resumedFrom: args.swarm_id, phase: swarm.phase, workspace: swarm.workspace, branch: swarm.branch, ...skillsSummary(swarm) };
+    }
+    case 'swarm_find_skills': {
+      if (!dotbot) throw new Error('DotBot is not connected; plan without skills.');
+      const units = Array.isArray(args.work_units) ? args.work_units : [];
+      if (!units.length) throw new Error('work_units is required');
+      return {
+        units: await dotbot.findSkills(units),
+        hint: 'Pass the skills worth using to swarm_start as skills: [{ id, work_unit, content_hash }]. Skip a unit whose best score is low or whose skill says it is not for this case.',
+      };
     }
     case 'swarm_list':
       return manager.list();
     case 'swarm_doctor':
-      return runDoctor();
+      return { ...(await runDoctor()), dotbot: dotbot ? { connected: true, baseUrl: dotbot.baseUrl } : { connected: false, reason: dotbotSkipReason } };
     case 'swarm_setup':
       return runSetup({ reinstall: Boolean(args.reinstall) });
     default:
@@ -240,5 +298,5 @@ serveStdio({
   tools: TOOLS,
   call,
   onClose: shutdown,
-  instructions: 'DotSwarm runs DeepSeek Flash agent teams so your tokens go to judgment, not reading or routine work. Use mode brief to have the team read sources and return one brief, build for work a spec and a command fully determine, and verify to check finished work and fix mechanical defects. Write what users read or see and make the decisions yourself. Do not read what the swarm wrote: read the brief, openQuestions, ownerQuestions, and ledger.open. The team cannot generate raster images: hand the image specification to the dotswarm-imager subagent. Taste work goes to dotswarm-designer, prose that has to persuade to dotswarm-writer; all three are installed for you and need no DeepSeek key. Wait with swarm_status wait_ms 300000 to 600000; never poll. If a tool says setup is needed, call swarm_setup, then swarm_doctor.',
+  instructions: `DotSwarm runs DeepSeek Flash agent teams so your tokens go to judgment, not reading or routine work. Use mode brief to have the team read sources and return one brief, build for work a spec and a command fully determine, and verify to check finished work and fix mechanical defects. Write what users read or see and make the decisions yourself. Do not read what the swarm wrote: read the brief, openQuestions, ownerQuestions, and ledger.open. The team cannot generate raster images: hand the image specification to the dotswarm-imager subagent. Taste work goes to dotswarm-designer, prose that has to persuade to dotswarm-writer; all three are installed for you and need no DeepSeek key. Wait with swarm_status wait_ms 300000 to 600000; never poll. If a tool says setup is needed, call swarm_setup, then swarm_doctor.${dotbot ? ' DotBot skills are available: while planning, call swarm_find_skills with your work units and pass the useful matches to swarm_start as skills.' : ''}`,
 });

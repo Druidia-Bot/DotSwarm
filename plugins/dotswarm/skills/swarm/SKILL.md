@@ -92,6 +92,8 @@ Do not open a browser, take screenshots, or run the checks yourself, and do not 
 
 Pass `objective`, `acceptance_criteria` with exact commands, `context`, the absolute `workspace`, and `max_agents` (2 or 3 is usually enough). Set `design: true` only when the stage produces something a person looks at (screens, pages, visual assets); research, planning, and code-only stages leave it off. Put everything you already know in `context` now: confirmed facts, constraints, sources the team may cite, validators to reuse, files not to touch. Each fact you hold back becomes a steer later.
 
+If `swarm_find_skills` is among your tools, DotBot skills are available. While you write the plan, call it once with all your work units as short task descriptions that name the tools involved, and pass the strong matches to `swarm_start` as `skills` with the work unit each one serves and its `content_hash`. Skip a match whose score is low or whose "not for" note fits your case. The team receives the skill folders and reads them; you do not need to. If the tool is absent, plan as usual.
+
 Brief and verify swarms work in your checkout. Build swarms work in a worktree on branch `swarm/<id>` in a git repository; merge that branch when its acceptance commands pass. Pass `isolate: false` to have a build swarm write straight into your checkout; give it write scopes that do not overlap yours. The default `permission_mode` is `danger-full-access` because the workspace sandbox breaks native toolchains on Windows.
 
 ## Who does what
