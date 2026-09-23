@@ -126,7 +126,10 @@ export const BENIGN_TOOL_ERRORS = new Set([
 export function tokenPrices() {
   const input = Number(process.env.DOTSWARM_PRICE_INPUT_PER_M);
   const output = Number(process.env.DOTSWARM_PRICE_OUTPUT_PER_M);
-  return Number.isFinite(input) && Number.isFinite(output) && (input > 0 || output > 0) ? { input, output } : null;
+  if (!(Number.isFinite(input) && Number.isFinite(output) && (input > 0 || output > 0))) return null;
+  // Prompt tokens served from the provider cache bill at their own, much lower rate.
+  const cacheRead = process.env.DOTSWARM_PRICE_CACHE_READ_PER_M ? Number(process.env.DOTSWARM_PRICE_CACHE_READ_PER_M) : NaN;
+  return { input, output, ...(Number.isFinite(cacheRead) && cacheRead >= 0 ? { cacheRead } : {}) };
 }
 
 export function toPosix(p) {
