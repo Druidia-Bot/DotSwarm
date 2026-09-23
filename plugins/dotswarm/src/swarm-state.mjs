@@ -18,6 +18,12 @@ function textOf(content) {
   return content.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('');
 }
 
+/** One line naming a failed Lead turn and the provider's own message, code, and status. */
+function describeTurnError(turn, error) {
+  const detail = [error?.code, error?.status, error?.requestId && `request ${error.requestId}`].filter((v) => v !== undefined && v !== null && v !== '').join(', ');
+  return `Lead turn ${turn ?? '?'} ended in an error: ${error?.message ?? 'no message'}${detail ? ` (${detail})` : ''}`;
+}
+
 export class SwarmState extends EventEmitter {
   constructor(rootSessionId) {
     super();
@@ -34,6 +40,8 @@ export class SwarmState extends EventEmitter {
     this.eventCount = 0;
     this.lastEventAt = null;
     this.lastRootTurnEnd = null;
+    // The error that ended the Lead's latest turn, until the Lead starts another turn.
+    this.leadTurnError = null;
     this.#session(rootSessionId).name = 'lead';
     this.#session(rootSessionId).role = 'lead';
   }
@@ -61,7 +69,10 @@ export class SwarmState extends EventEmitter {
     if (method === 'session.status') {
       const s = this.#session(params.sessionId);
       s.status = params.status;
-      if (params.sessionId === this.rootSessionId) this.rootStatus = params.status;
+      if (params.sessionId === this.rootSessionId) {
+        this.rootStatus = params.status;
+        if (params.status === 'running') this.leadTurnError = null;
+      }
       significant = true;
     } else if (method === 'subagent.started') {
       this.#session(params.childSessionId);
@@ -147,7 +158,10 @@ export class SwarmState extends EventEmitter {
         return false;
       case 'turn/end':
         s.turns += 1;
-        if (sessionId === this.rootSessionId) this.lastRootTurnEnd = data.reason?.kind ?? null;
+        if (sessionId === this.rootSessionId) {
+          this.lastRootTurnEnd = data.reason?.kind ?? null;
+          this.leadTurnError = data.reason?.kind === 'error' ? describeTurnError(data.turn, data.reason.error) : null;
+        }
         return true;
       default:
         return SIGNIFICANT.has(event.type);

@@ -1,7 +1,7 @@
 # managed-by: dotswarm. swarm_setup keeps this file current; remove this line to keep your own edits.
 name = "dotswarm-writer"
 description = "Prose people will read where voice and persuasion matter: page copy, product and marketing text, important documentation. Give it a brief and the exact files to produce."
-model = "gpt-5.6-sol"
+model = "gpt-6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 developer_instructions = """

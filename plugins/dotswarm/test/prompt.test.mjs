@@ -39,7 +39,7 @@ test('lead prompt explicitly requests Agent Teams and carries the protocol and r
     context: 'do not touch db', maxAgents: 3, workspace: 'C:/ws', isolated: true,
   });
   assert.match(text, /Use Agent Teams/);
-  assert.match(text, /up to 3 teammates/);
+  assert.match(text, /at most 3 teammates in total/);
   assert.match(text, /mcp__findings__record_finding/);
   assert.match(text, /## Handoff/);
   assert.match(text, /isolated git worktree/);

@@ -40,6 +40,26 @@ function isGitRepoSync(cwd) {
   }
 }
 
+const OWNER_HEARTBEAT_MS = 30_000;
+const OWNER_STALE_MS = 4 * OWNER_HEARTBEAT_MS;
+
+/**
+ * Whether the server process recorded in a swarm's state.json still owns it. The pid must be
+ * alive and its heartbeat recent, so a reused pid or a rebooted machine reads as gone. Our own
+ * pid never counts: a swarm this process owns is already in its manager.
+ */
+export function ownerAlive(owner, now = Date.now()) {
+  const pid = Number(owner?.pid);
+  if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) return false;
+  if (!(now - Date.parse(owner.heartbeatAt) < OWNER_STALE_MS)) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === 'EPERM';
+  }
+}
+
 function readJson(file, fallback = null) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -102,7 +122,7 @@ const SCREEN_LIST_CAP = 40;
  */
 export function attentionReason({ phase, error, newFindings, openQuestionIds, knownQuestionIds, toolErrorCount, knownToolErrorCount }) {
   if (error || phase === 'failed') return 'failed';
-  if (phase === 'idle' || phase === 'stopped' || phase === 'detached') return phase;
+  if (phase === 'idle' || phase === 'stopped' || phase === 'detached' || phase === 'owned-elsewhere') return phase;
   if (openQuestionIds.some((id) => !knownQuestionIds.includes(id))) return 'question';
   if (newFindings.some((f) => f.type === 'failure')) return 'failure';
   if (newFindings.some((f) => f.type === 'decision' && /plan/i.test(f.scope))) return 'plan';
@@ -132,9 +152,11 @@ export class Swarm {
     this.branch = null;
     this.launch = launch ?? defaultLaunch;
     this.#log = null;
+    this.owner = null;
   }
 
   #log;
+  #heartbeat = null;
 
   #write(record) {
     this.#log?.write(JSON.stringify({ time: new Date().toISOString(), ...record }) + '\n');
@@ -147,6 +169,8 @@ export class Swarm {
       id: this.id, phase: this.phase, workspace: this.workspace, branch: this.branch, rootSessionId: this.rootSessionId,
       startedAt: this.startedAt, endedAt: this.endedAt, prompts: this.prompts, resumedFrom: this.spec.resume?.fromSwarmId ?? null,
       error: this.error, savedAt: new Date().toISOString(),
+      // Lets another server process tell a swarm running here from one whose owner is gone.
+      owner: { pid: process.pid, heartbeatAt: new Date().toISOString() },
     };
     try {
       fs.writeFileSync(path.join(this.dir, 'state.json'), JSON.stringify(state, null, 2));
@@ -171,8 +195,11 @@ export class Swarm {
     swarm.prompts = saved.prompts ?? [];
     swarm.error = saved.error ?? null;
     swarm.state = foldEventLog(dir, swarm.rootSessionId);
-    // A swarm whose owner died mid-run is detached; a clean end keeps its final phase.
-    swarm.phase = saved.phase === 'stopped' || saved.phase === 'failed' ? saved.phase : 'detached';
+    // A clean end keeps its final phase. Otherwise a swarm whose owner is still alive is running in
+    // another server process, and one whose owner died mid-run is detached.
+    if (saved.phase === 'stopped' || saved.phase === 'failed') swarm.phase = saved.phase;
+    else if (ownerAlive(saved.owner)) { swarm.phase = 'owned-elsewhere'; swarm.owner = saved.owner; }
+    else swarm.phase = 'detached';
     return swarm;
   }
 
@@ -214,6 +241,7 @@ export class Swarm {
       this.client.on('stderr', (chunk) => this.#write({ kind: 'stderr', text: chunk }));
       this.client.on('exit', (exit) => {
         this.#write({ kind: 'exit', ...exit });
+        clearInterval(this.#heartbeat);
         if (this.phase !== 'stopped') {
           this.phase = this.phase === 'idle' ? 'stopped' : 'failed';
           this.error ??= `runtime exited (code ${exit.code}) ${this.client.stderrTail.slice(-1500)}`;
@@ -240,9 +268,12 @@ export class Swarm {
       await this.#prompt(prompt, 'objective');
       this.phase = 'running';
       this.persist();
+      this.#heartbeat = setInterval(() => this.persist(), OWNER_HEARTBEAT_MS);
+      this.#heartbeat.unref();
       this.state.on('change', () => this.#refreshPhase());
       return this;
     } catch (error) {
+      clearInterval(this.#heartbeat);
       this.phase = 'failed';
       this.error = `${error.message}${this.client?.stderrTail ? `\n--- dsh stderr ---\n${this.client.stderrTail.slice(-2000)}` : ''}`;
       this.endedAt = new Date().toISOString();
@@ -332,11 +363,24 @@ export class Swarm {
     return path.join(this.dir, 'brief.md');
   }
 
+  /**
+   * What went wrong, if anything: a runtime or start failure, else the provider error that ended
+   * the Lead's latest turn. A turn error leaves the runtime up, so a steer can retry once the cause is fixed.
+   */
+  get problem() {
+    return this.error ?? this.state.leadTurnError;
+  }
+
   get alive() {
     return !this.detached && this.client !== null && !this.client.exited && (this.phase === 'running' || this.phase === 'idle' || this.phase === 'starting');
   }
 
+  #ownedElsewhereNote(action) {
+    return `swarm ${this.id} is running in another DotSwarm server process (pid ${this.owner?.pid}); ${action} from the session that started it`;
+  }
+
   async steer(instruction) {
+    if (this.phase === 'owned-elsewhere') throw new Error(this.#ownedElsewhereNote('steer it'));
     if (this.detached) throw new Error(`swarm ${this.id} is detached (its server process is gone); use swarm_resume to continue it`);
     if (!this.alive) throw new Error(`swarm ${this.id} is ${this.phase}; it cannot be steered`);
     const text = String(instruction ?? '').trim();
@@ -417,7 +461,7 @@ export class Swarm {
   #attentionSnapshot(sinceFinding) {
     return {
       phase: this.phase,
-      error: this.error,
+      error: this.problem,
       newFindings: sinceFinding ? this.findings.list({ since: sinceFinding, limit: 500 }).filter((f) => f.type !== 'steer') : [],
       openQuestionIds: this.openQuestions(50).map((q) => q.id),
       toolErrorCount: this.state.errors.filter((e) => !BENIGN_TOOL_ERRORS.has(e.code)).length,
@@ -447,6 +491,7 @@ export class Swarm {
   }
 
   async stop() {
+    if (this.phase === 'owned-elsewhere') throw new Error(this.#ownedElsewhereNote('stop it'));
     if (this.detached) {
       this.phase = 'stopped';
       return { phase: this.phase, note: 'detached swarm marked stopped; its runtime was already gone' };
@@ -454,6 +499,7 @@ export class Swarm {
     if (this.phase === 'stopped' || this.phase === 'failed') return { phase: this.phase };
     this.phase = 'stopped';
     this.endedAt = new Date().toISOString();
+    clearInterval(this.#heartbeat);
     this.persist();
     const exit = await this.client?.close();
     this.#log?.end();
@@ -474,15 +520,17 @@ export class Swarm {
     return {
       swarmId: this.id,
       phase: this.phase,
-      ...(this.detached ? { detached: 'The server that ran this swarm is gone. Status is replayed from its log; use swarm_resume to continue the work.' } : {}),
+      ...(this.phase === 'owned-elsewhere' ? { ownedElsewhere: `${this.#ownedElsewhereNote('steer, stop, or resume it only')}. Status is replayed from its log.` } : {}),
+      ...(this.phase === 'detached' ? { detached: 'The server that ran this swarm is gone. Status is replayed from its log; use swarm_resume to continue the work.' } : {}),
       ...(this.spec.resume ? { resumedFrom: this.spec.resume.fromSwarmId } : {}),
       mode: this.spec.mode ?? 'build',
       ...(this.spec.design ? { design: true, model: this.spec.model, screens: toPosix(path.join(this.dir, 'screens')) } : {}),
-      ...(this.error ? { error: this.error.slice(0, 1500) } : {}),
+      ...(this.problem ? { error: this.problem.slice(0, 1500) } : {}),
       elapsedSeconds: this.elapsedSeconds(),
       workspace: this.workspace,
       ...(this.branch ? { branch: this.branch } : {}),
       roster: s.roster(),
+      ...(s.members.size > this.spec.maxAgents ? { teammatesOverBudget: { budget: this.spec.maxAgents, spawned: s.members.size } } : {}),
       tasks: { counts: s.taskCounts(), board: s.taskBoard() },
       mail: { queued: s.mail.queued, delivered: s.mail.delivered },
       steers: this.steerDelivery(),
@@ -605,7 +653,7 @@ export class Swarm {
     return {
       swarmId: this.id,
       phase: this.phase,
-      ...(this.error ? { error: this.error.slice(0, 1500) } : {}),
+      ...(this.problem ? { error: this.problem.slice(0, 1500) } : {}),
       complete: this.phase === 'idle' && report !== null,
       workspace: this.workspace,
       ...(this.branch ? { branch: this.branch } : {}),
@@ -716,6 +764,9 @@ export class SwarmManager {
   async resume(id, { instruction, maxAgents, mode, design } = {}) {
     const previous = this.get(id);
     if (previous.alive) throw new Error(`swarm ${id} is still running; steer it instead of resuming`);
+    if (previous.phase === 'owned-elsewhere') {
+      throw new Error(`swarm ${id} is still running in another DotSwarm server process (pid ${previous.owner?.pid}); steer it from there instead of resuming`);
+    }
     const nextDesign = design === undefined ? Boolean(previous.spec.design) : Boolean(design);
     // Skills the previous swarm loaded are fetched again by content hash, with the same
     // idempotency key so the same version is not charged twice.
@@ -744,13 +795,27 @@ export class SwarmManager {
     return swarm;
   }
 
+  /**
+   * Re-read a swarm another process may still be writing: its owner can have finished or died
+   * since we loaded it, and its log has grown.
+   */
+  #refresh(id) {
+    const swarm = this.swarms.get(id);
+    if (!swarm?.detached || (swarm.phase !== 'detached' && swarm.phase !== 'owned-elsewhere')) return;
+    try { this.swarms.set(id, Swarm.fromDisk(id)); } catch { /* keep what we had */ }
+  }
+
   get(id) {
+    if (!this.swarms.has(id)) this.loadDetached();
+    this.#refresh(id);
     const swarm = this.swarms.get(id);
     if (!swarm) throw new Error(`unknown swarm ${id}; known: ${[...this.swarms.keys()].join(', ') || 'none'}`);
     return swarm;
   }
 
   list() {
+    this.loadDetached();
+    for (const id of this.swarms.keys()) this.#refresh(id);
     return [...this.swarms.values()]
       .sort((a, b) => a.id.localeCompare(b.id))
       .map((s) => ({

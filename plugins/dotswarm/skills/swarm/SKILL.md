@@ -122,12 +122,14 @@ When a stage stops at an approval gate, `swarm_result.ownerQuestions` holds ever
 
 ## While a swarm runs
 
-Call `swarm_status` with `wait_ms` of 300000 to 600000 and `since_finding` set to the `latestId` from your previous call. It blocks until the swarm needs you and says why in `wake`: `plan`, `question`, `failure`, `warnings`, `tool-errors`, `idle`, `stopped`, `failed`, `detached`, or `timeout`. Do not poll and do not sleep between calls. While you wait, do not write status messages to the user; say something only when a call returns with something to report.
+Call `swarm_status` with `wait_ms` of 300000 to 600000 and `since_finding` set to the `latestId` from your previous call. It blocks until the swarm needs you and says why in `wake`: `plan`, `question`, `failure`, `warnings`, `tool-errors`, `idle`, `stopped`, `failed`, `detached`, `owned-elsewhere`, or `timeout`. Do not poll and do not sleep between calls. While you wait, do not write status messages to the user; say something only when a call returns with something to report.
 
 - `plan`: check the plan against your intent once. This is the cheapest point to correct drift.
 - `question`: answer with one `swarm_steer`.
 - `failure` or `warnings` that change the plan: one `swarm_steer` with the decision.
 - `idle`: call `swarm_result`.
+- `failed` with phase `idle`: the Lead's turn ended in a provider error, named in `error`. Fix the cause (a model or setting the provider rejects), then one `swarm_steer` retries; otherwise `swarm_stop`.
+- `teammatesOverBudget` in a status: the Lead spawned more teammates than `max_agents`. Steer it to finish with the teammates it has.
 - Two `timeout` wakes with no task movement: `swarm_inspect` `errors`, then steer or stop.
 
 Never edit files inside a running swarm's write scopes. Missing work becomes `swarm_task_add`, not your own edit.
@@ -143,6 +145,8 @@ For a large codebase where your own audit produced a numbered list of problems, 
 ## If a swarm is detached
 
 After a Codex restart, `swarm_list` shows earlier swarms with phase `detached`. Their work on disk and their ledger survive. Call `swarm_resume` with the swarm id and an `instruction` saying what remains; do not start a fresh `swarm_start` for the same objective.
+
+A swarm with phase `owned-elsewhere` is still running in another DotSwarm server process, such as a second Codex or Claude Code session. It cannot be steered, stopped, or resumed from here; leave it to the session that started it, and do not start another swarm in its workspace.
 
 ## Setup and failures
 
