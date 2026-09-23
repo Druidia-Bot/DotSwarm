@@ -31,7 +31,7 @@ function runTurn(sessionId, messageId, text) {
     event(sessionId, 'tool/call', { turn: 1, step: 1, callId: 'c1', name: 'spawn_teammate', arguments: '{}' });
     event(teammate, 'tool/call', { turn: 1, step: 1, callId: 'c2', name: 'read', arguments: '{}' });
     event(teammate, 'tool/result', { turn: 1, step: 1, message: { content: [{ type: 'tool-result', isError: true }] }, error: { name: 'FsError', code: 'ENOENT', reason: 'missing file' } });
-    event(teammate, 'assistant/message', { turn: 1, step: 2, message: { content: [{ type: 'text', text: 'worker done' }] }, stream: [], usage: { inputTokens: 100, outputTokens: 20 } });
+    event(teammate, 'assistant/message', { turn: 1, step: 2, message: { content: [{ type: 'text', text: 'worker done' }] }, stream: [], usage: { inputTokens: 100, outputTokens: 20, cacheReadTokens: 300 } });
     event(sessionId, 'team/message/queued', { version: 2, teamId: sessionId, message: { id: 'm1', senderId: teammate, senderName: 'worker', targetId: sessionId, content: [{ type: 'text', text: 'finished task-1' }] } });
     event(sessionId, 'team/message/delivered', { version: 2, teamId: sessionId, messageId: 'm1', targetId: sessionId });
     event(sessionId, 'team/task', { version: 2, teamId: sessionId, task: { id: 'task-1', revision: 3, subject: 'Explore', description: 'look', status: 'completed', ownerId: teammate, blockedBy: [], writeScopes: [] } });

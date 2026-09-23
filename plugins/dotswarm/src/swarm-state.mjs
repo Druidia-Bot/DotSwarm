@@ -43,7 +43,7 @@ export class SwarmState extends EventEmitter {
     if (!s) {
       s = {
         id, name: null, role: 'teammate', status: 'unknown',
-        messages: [], toolCalls: 0, recentTools: [], tokens: { input: 0, output: 0 }, turns: 0,
+        messages: [], toolCalls: 0, recentTools: [], tokens: { input: 0, output: 0, cacheRead: 0 }, turns: 0,
       };
       this.sessions.set(id, s);
     }
@@ -129,6 +129,7 @@ export class SwarmState extends EventEmitter {
         if (data.usage) {
           s.tokens.input += data.usage.inputTokens ?? 0;
           s.tokens.output += data.usage.outputTokens ?? 0;
+          s.tokens.cacheRead += data.usage.cacheReadTokens ?? 0;
         }
         return sessionId === this.rootSessionId && Boolean(text);
       }
@@ -189,9 +190,9 @@ export class SwarmState extends EventEmitter {
   }
 
   tokens() {
-    let input = 0; let output = 0;
-    for (const s of this.sessions.values()) { input += s.tokens.input; output += s.tokens.output; }
-    return { input, output };
+    let input = 0; let output = 0; let cacheRead = 0;
+    for (const s of this.sessions.values()) { input += s.tokens.input; output += s.tokens.output; cacheRead += s.tokens.cacheRead; }
+    return { input, output, cacheRead };
   }
 
   tokensByMember() {

@@ -43,6 +43,9 @@ test('start, observe, steer, result, stop against the fake runtime', async (t) =
   assert.equal(status.toolErrors[0].code, 'ENOENT');
   assert.equal(status.cost.swarmTokens.input, 600);
   assert.equal(status.cost.byMember.worker.input, 100);
+  assert.equal(status.cost.swarmTokens.cacheRead, 300);
+  assert.equal(status.cost.byMember.worker.cacheRead, 300);
+  assert.equal(status.cost.cacheHitPct, 33.3);
   assert.equal(status.cost.estimatedUsd, undefined);
   assert.deepEqual(status.openQuestions, []);
   swarm.findings.append({ author: 'lead', type: 'question', scope: 'coordinator', message: 'may I edit wrangler.jsonc?' });
