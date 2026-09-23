@@ -331,11 +331,13 @@ export class Swarm {
   cost() {
     const tokens = this.state.tokens();
     const prices = tokenPrices();
+    const prompt = tokens.input + tokens.cacheRead;
     return {
       swarmTokens: tokens,
+      ...(prompt > 0 ? { cacheHitPct: Number(((100 * tokens.cacheRead) / prompt).toFixed(1)) } : {}),
       byMember: this.state.tokensByMember(),
       ...(prices ? { estimatedUsd: Number(((tokens.input * prices.input + tokens.output * prices.output) / 1_000_000).toFixed(4)) } : {}),
-      note: 'DeepSeek tokens only. The coordinator spends separately; keep the coordinator to planning, steering, and review.',
+      note: 'DeepSeek tokens only; input excludes prompt tokens served from the provider cache, which cacheRead counts. The coordinator spends separately; keep the coordinator to planning, steering, and review.',
     };
   }
 
