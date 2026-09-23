@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { BENIGN_TOOL_ERRORS, DEFAULTS, PROFILE_NAME, dshBin, dshEnv, findingsServerPath, swarmsDir, toPosix, tokenPrices, workDir } from './config.mjs';
+import { BENIGN_TOOL_ERRORS, DEFAULTS, PROFILE_NAME, dshBin, dshEnv, findingsServerPath, stablePrefixPluginPath, swarmsDir, toPosix, tokenPrices, workDir } from './config.mjs';
 import { changedFiles, ledgerDigest, renderHandoff } from './digest.mjs';
 import { DshClient } from './dsh-client.mjs';
 import { Findings } from './findings.mjs';
@@ -62,7 +62,10 @@ function foldEventLog(dir, rootSessionId) {
   return state;
 }
 
-/** Per-swarm patch layered over the profile: the findings ledger MCP server with literal paths. */
+/**
+ * Per-swarm patch layered over the profile: the findings ledger MCP server with literal paths, and
+ * the plugin that keeps each member's name out of the cached system-prompt prefix.
+ */
 function swarmPatch({ findingsFile, swarmId }) {
   const q = (s) => JSON.stringify(s);
   return [
@@ -79,6 +82,8 @@ function swarmPatch({ findingsFile, swarmId }) {
     `          SWARM_FINDINGS_FILE: ${q(toPosix(findingsFile))}`,
     `          SWARM_ID: ${q(swarmId)}`,
     '        failOnStartupError: true',
+    '    - id: dotswarm-stable-prefix',
+    `      name: ${q(toPosix(stablePrefixPluginPath()))}`,
     '',
   ].join('\n');
 }

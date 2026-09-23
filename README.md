@@ -101,6 +101,7 @@ Each starts with about half the usual context (memories, plugins, app guidance a
 | Lead prompt, worker protocol, review standard, quality bar, brief, verify, design, and refactor sections, report format | `src/prompt.mjs` |
 | Result digest, risky-file list, and `handoff.md` | `src/digest.mjs` |
 | Findings ledger and its MCP server | `src/findings.mjs`, `src/findings-server.mjs` |
+| Harness plugin that keeps every member's system prompt identical, so the provider's prefix cache is shared across the team | `src/stable-prefix.mjs` |
 | Minimal MCP stdio server | `src/mcp.mjs` |
 | Profile generation, setup, doctor | `src/profile.mjs`, `src/setup.mjs` |
 

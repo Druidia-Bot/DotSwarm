@@ -87,6 +87,10 @@ export function findingsServerPath() {
   return path.join(ROOT, 'src', 'findings-server.mjs');
 }
 
+export function stablePrefixPluginPath() {
+  return path.join(ROOT, 'src', 'stable-prefix.mjs');
+}
+
 export function keyFile() {
   return path.join(dshHome(), '.env');
 }
