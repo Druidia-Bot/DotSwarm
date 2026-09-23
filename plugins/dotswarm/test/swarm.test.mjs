@@ -44,16 +44,16 @@ test('start, observe, steer, result, stop against the fake runtime', async (t) =
   assert.equal(status.cost.swarmTokens.input, 600);
   assert.equal(status.cost.byMember.worker.input, 100);
   assert.equal(status.cost.estimatedUsd, undefined);
-  assert.equal(status.teammatesOverBudget, undefined);
-  swarm.spec.maxAgents = 0;
-  assert.deepEqual(swarm.status().teammatesOverBudget, { budget: 0, spawned: 1 }, 'a Lead past its teammate budget is reported');
-  swarm.spec.maxAgents = 2;
   assert.deepEqual(status.openQuestions, []);
   swarm.findings.append({ author: 'lead', type: 'question', scope: 'coordinator', message: 'may I edit wrangler.jsonc?' });
   assert.equal(swarm.status().openQuestions[0].message, 'may I edit wrangler.jsonc?');
   assert.equal(swarm.status({ sinceFinding: 'F-001' }).findings.new.length, 0);
   assert.equal(swarm.status({ sinceFinding: 'F-000' }).findings.new.length, 1);
   assert.equal(swarm.status().findings.latestId, 'F-001');
+  assert.equal(status.teammatesOverBudget, undefined);
+  swarm.spec.maxAgents = 0;
+  assert.deepEqual(swarm.status().teammatesOverBudget, { budget: 0, spawned: 1 }, 'a Lead past its teammate budget is reported');
+  swarm.spec.maxAgents = 2;
 
   const result = await swarm.result();
   assert.equal(result.complete, true);
