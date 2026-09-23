@@ -336,8 +336,8 @@ export class Swarm {
       swarmTokens: tokens,
       ...(prompt > 0 ? { cacheHitPct: Number(((100 * tokens.cacheRead) / prompt).toFixed(1)) } : {}),
       byMember: this.state.tokensByMember(),
-      ...(prices ? { estimatedUsd: Number(((tokens.input * prices.input + tokens.output * prices.output) / 1_000_000).toFixed(4)) } : {}),
-      note: 'DeepSeek tokens only; input excludes prompt tokens served from the provider cache, which cacheRead counts. The coordinator spends separately; keep the coordinator to planning, steering, and review.',
+      ...(prices ? { estimatedUsd: Number(((tokens.input * prices.input + tokens.cacheRead * (prices.cacheRead ?? 0) + tokens.output * prices.output) / 1_000_000).toFixed(4)) } : {}),
+      note: `DeepSeek tokens only; input excludes prompt tokens served from the provider cache, which cacheRead counts.${prices && prices.cacheRead === undefined && tokens.cacheRead > 0 ? ' estimatedUsd leaves cached reads out; set DOTSWARM_PRICE_CACHE_READ_PER_M to price them.' : ''} The coordinator spends separately; keep the coordinator to planning, steering, and review.`,
     };
   }
 

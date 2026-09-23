@@ -47,6 +47,14 @@ test('start, observe, steer, result, stop against the fake runtime', async (t) =
   assert.equal(status.cost.byMember.worker.cacheRead, 300);
   assert.equal(status.cost.cacheHitPct, 33.3);
   assert.equal(status.cost.estimatedUsd, undefined);
+  process.env.DOTSWARM_PRICE_INPUT_PER_M = '100';
+  process.env.DOTSWARM_PRICE_OUTPUT_PER_M = '200';
+  assert.equal(swarm.cost().estimatedUsd, 0.08, 'input 600 and output 100; cached reads unpriced');
+  assert.match(swarm.cost().note, /DOTSWARM_PRICE_CACHE_READ_PER_M/);
+  process.env.DOTSWARM_PRICE_CACHE_READ_PER_M = '10';
+  assert.equal(swarm.cost().estimatedUsd, 0.083, 'plus 300 cached reads at 10');
+  assert.doesNotMatch(swarm.cost().note, /DOTSWARM_PRICE_CACHE_READ_PER_M/);
+  for (const k of ['INPUT', 'OUTPUT', 'CACHE_READ']) delete process.env[`DOTSWARM_PRICE_${k}_PER_M`];
   assert.deepEqual(status.openQuestions, []);
   swarm.findings.append({ author: 'lead', type: 'question', scope: 'coordinator', message: 'may I edit wrangler.jsonc?' });
   assert.equal(swarm.status().openQuestions[0].message, 'may I edit wrangler.jsonc?');
