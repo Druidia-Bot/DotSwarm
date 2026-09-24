@@ -10,3 +10,5 @@
 - Tests run against `test/fixtures/fake-dsh.mjs`. Anything that changes the wire contract needs a fixture change and a live smoke (`npm run smoke:live`) before it is called done.
 - Never write keys into the tree. dsh reads `DEEPSEEK_API_KEY` from the environment or `<data dir>/dsh-home/.env`.
 - Bump the version in `plugins/dotswarm/package.json`, both `plugin.json` files, and `.claude-plugin/marketplace.json` together.
+- This repository is public. DotBot v3 (skills and hosted tools) is designed and built in a separate private repository; its server code, catalog contents, pricing, and design documents never go here. The DotBot client plugin may later join this marketplace as a second self-contained plugin.
+- DotSwarm works fully without DotBot. DotBot integration activates only when a DotBot key is configured, and every DotBot failure (missing key, network error, slow search) falls back to the behavior without DotBot.
