@@ -14,6 +14,8 @@ const fake = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures',
 const fakeLaunch = (mode) => ({ swarm, patchFile }) => {
   assert.ok(fs.existsSync(patchFile), 'per-swarm patch written');
   assert.match(fs.readFileSync(patchFile, 'utf8'), /serverName: findings/);
+  const plugin = /id: dotswarm-stable-prefix\n\s+name: "([^"]+)"/.exec(fs.readFileSync(patchFile, 'utf8'));
+  assert.ok(plugin && fs.existsSync(plugin[1]), 'stable-prefix plugin mounted by absolute path');
   return new DshClient({
     command: process.execPath, args: [fake, '--profile', 'swarm', '--patch', patchFile], cwd: swarm.workspace,
     env: { ...process.env, FAKE_DSH_MODE: mode }, initializeTimeoutMs: 10_000, requestTimeoutMs: 5000,
